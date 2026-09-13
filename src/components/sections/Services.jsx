@@ -15,7 +15,7 @@ import Section from '../ui/Section'
 import Container from '../ui/Container'
 import Card from '../ui/Card'
 
-function ServiceCard({ item, variant = 'default' }) {
+function ServiceCard({ item, variant = 'default', accentColor }) {
   const { name, description, priceEstimate, icon } = item
 
   if (variant === 'compact') {
@@ -28,7 +28,7 @@ function ServiceCard({ item, variant = 'default' }) {
             <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{description}</p>
           )}
           {priceEstimate && (
-            <p className="text-sm font-bold text-current mt-1">{priceEstimate}</p>
+            <p className="text-sm font-bold mt-1" style={{ color: accentColor }}>{priceEstimate}</p>
           )}
         </div>
       </Card>
@@ -43,7 +43,7 @@ function ServiceCard({ item, variant = 'default' }) {
         <p className="text-slate-600 text-sm leading-relaxed flex-1">{description}</p>
       )}
       {priceEstimate && (
-        <p className="font-bold text-current text-base mt-auto pt-2 border-t border-slate-100">
+        <p className="font-bold text-base mt-auto pt-2 border-t border-slate-100" style={{ color: accentColor }}>
           {priceEstimate}
         </p>
       )}
@@ -57,6 +57,7 @@ export default function Services({
   sectionDesc = '',
   className = '',
   cardVariant = 'default',
+  accentColor,
 }) {
   if (!data || data.length === 0) return null
 
@@ -65,7 +66,7 @@ export default function Services({
       <Container>
         {/* Section header */}
         <div className="text-center mb-12 space-y-3">
-          <h2 className="text-3xl md:text-4xl font-bold">{sectionLabel}</h2>
+          <h2 className="text-3xl md:text-4xl font-bold" style={{ color: accentColor }}>{sectionLabel}</h2>
           {sectionDesc && (
             <p className="text-slate-500 max-w-xl mx-auto">{sectionDesc}</p>
           )}
@@ -80,7 +81,7 @@ export default function Services({
           }
         >
           {data.map((item, i) => (
-            <ServiceCard key={item.name ?? i} item={item} variant={cardVariant} />
+            <ServiceCard key={item.name ?? i} item={item} variant={cardVariant} accentColor={accentColor} />
           ))}
         </div>
       </Container>

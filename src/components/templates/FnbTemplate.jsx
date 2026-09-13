@@ -15,7 +15,7 @@ import Contact from '../sections/Contact'
 import { generateWhatsappUrl } from '../../lib/templateSelector'
 
 // Warm-style navbar
-function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#452821' }) {
+function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#452821', isMobilePreview = false }) {
   const waUrl = generateWhatsappUrl(
     whatsappNumber,
     ctaWhatsappMessage || 'Halo, saya ingin memesan menu di ' + businessName
@@ -33,7 +33,7 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
         </a>
 
         <div className="flex items-center gap-5">
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-amber-100/90">
+          <nav className={[isMobilePreview ? 'hidden' : 'hidden md:flex', 'items-center gap-6 text-sm font-medium text-amber-100/90'].join(' ')}>
             <a href="#hero" className="hover:text-white transition-colors">Beranda</a>
             <a href="#services" className="hover:text-white transition-colors">Menu</a>
             <a href="#about" className="hover:text-white transition-colors">Tentang</a>
@@ -83,7 +83,7 @@ function Footer({ businessName, tagline, instagram, primaryColor = '#452821' }) 
   )
 }
 
-export default function FnbTemplate({ data = {}, theme }) {
+export default function FnbTemplate({ data = {}, theme, viewport = 'desktop' }) {
   const {
     meta = {},
     hero = {},
@@ -123,6 +123,7 @@ export default function FnbTemplate({ data = {}, theme }) {
         whatsappNumber={contact.whatsappNumber}
         ctaWhatsappMessage={hero.ctaWhatsappMessage}
         primaryColor={primaryColor}
+        isMobilePreview={viewport === 'mobile'}
       />
 
       {/* Hero — Classic Warm with Tagline Pill */}
@@ -134,6 +135,7 @@ export default function FnbTemplate({ data = {}, theme }) {
           className="text-white min-h-[65vh] flex flex-col justify-center"
           style={{ backgroundColor: primaryColor }}
           _theme="fnb"
+          mobilePreview={viewport === 'mobile'}
         />
       </div>
 
@@ -148,6 +150,7 @@ export default function FnbTemplate({ data = {}, theme }) {
           sectionDesc="Pilihan sajian terbaik dengan cita rasa autentik dan bahan berkualitas setiap hari"
           className="text-amber-900"
           cardVariant="default"
+          accentColor={_accentColor}
         />
       </div>
 
@@ -172,6 +175,7 @@ export default function FnbTemplate({ data = {}, theme }) {
         <Testimonials
           data={testimonials}
           className="text-amber-900"
+          accentColor={_accentColor}
         />
       </div>
 

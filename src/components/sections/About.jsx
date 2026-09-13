@@ -18,8 +18,16 @@ import Container from '../ui/Container'
 import Badge from '../ui/Badge'
 
 export default function About({ data = {}, meta = {}, className = '' }) {
-  const { description = '', vision = '', values = [] } = data
+  const {
+    description = '',
+    story = '',
+    vision = '',
+    values = [],
+    highlights = [],
+  } = data
   const { businessName = 'Bisnis Kami', category = '' } = meta
+  const body = description || story
+  const valueList = values.length > 0 ? values : highlights
 
   return (
     <Section id="about" className={className}>
@@ -33,9 +41,9 @@ export default function About({ data = {}, meta = {}, className = '' }) {
             <h2 className="text-3xl md:text-4xl font-bold">
               Tentang {businessName}
             </h2>
-            {description && (
+            {body && (
               <p className="text-base md:text-lg text-slate-600 leading-relaxed">
-                {description}
+                {body}
               </p>
             )}
             {vision && (
@@ -49,11 +57,11 @@ export default function About({ data = {}, meta = {}, className = '' }) {
           </div>
 
           {/* Values column */}
-          {values.length > 0 && (
+          {valueList.length > 0 && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-slate-800">Nilai Kami</h3>
               <ul className="space-y-3">
-                {values.map((val, i) => (
+                {valueList.map((val, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="mt-1 w-5 h-5 rounded-full bg-current opacity-80 shrink-0 flex items-center justify-center text-white text-xs font-bold">
                       {i + 1}
@@ -66,7 +74,7 @@ export default function About({ data = {}, meta = {}, className = '' }) {
           )}
 
           {/* Fallback if no values — decorative visual */}
-          {values.length === 0 && (
+          {valueList.length === 0 && (
             <div className="hidden md:flex items-center justify-center">
               <div className="w-64 h-64 rounded-3xl bg-current opacity-10 flex items-center justify-center">
                 <span className="text-7xl select-none">🏢</span>

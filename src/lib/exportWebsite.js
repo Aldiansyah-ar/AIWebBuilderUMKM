@@ -5,6 +5,13 @@
  */
 import { generateWhatsappUrl } from './templateSelector'
 
+const escapeHtml = (value = '') => String(value)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;')
+
 export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _currentTheme = 'modern-warm') {
   const {
     meta = {},
@@ -16,12 +23,12 @@ export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _cur
     theme = {},
   } = data
 
-  const businessName = meta.businessName || 'UMKM Website'
-  const tagline = meta.tagline || ''
-  const category = meta.category || ''
-  const title = hero.title || 'Selamat Datang'
-  const subtitle = hero.subtitle || ''
-  const ctaText = hero.ctaText || 'Pesan via WhatsApp'
+  const businessName = escapeHtml(meta.businessName || 'UMKM Website')
+  const tagline = escapeHtml(meta.tagline || '')
+  const category = escapeHtml(meta.category || '')
+  const title = escapeHtml(hero.title || 'Selamat Datang')
+  const subtitle = escapeHtml(hero.subtitle || '')
+  const ctaText = escapeHtml(hero.ctaText || 'Pesan via WhatsApp')
   const waNumber = contact.whatsappNumber || '628123456789'
   const waUrl = generateWhatsappUrl(waNumber, hero.ctaWhatsappMessage || `Halo, saya ingin pesan di ${businessName}`)
 
@@ -32,11 +39,11 @@ export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _cur
       (s) => `
       <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
         <div>
-          <div class="text-3xl mb-3">${s.icon || '✨'}</div>
-          <h3 class="font-bold text-lg text-slate-900">${s.name}</h3>
-          <p class="text-slate-600 text-sm mt-2 leading-relaxed">${s.description || ''}</p>
+          <div class="text-3xl mb-3">${escapeHtml(s.icon || '✨')}</div>
+          <h3 class="font-bold text-lg text-slate-900">${escapeHtml(s.name)}</h3>
+          <p class="text-slate-600 text-sm mt-2 leading-relaxed">${escapeHtml(s.description || '')}</p>
         </div>
-        ${s.priceEstimate ? `<div class="mt-4 pt-3 border-t border-slate-100 font-bold text-sm" style="color:${primaryColor}">${s.priceEstimate}</div>` : ''}
+        ${s.priceEstimate ? `<div class="mt-4 pt-3 border-t border-slate-100 font-bold text-sm" style="color:${primaryColor}">${escapeHtml(s.priceEstimate)}</div>` : ''}
       </div>`
     )
     .join('\n')
@@ -46,8 +53,8 @@ export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _cur
       (t) => `
       <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col gap-3">
         <div class="flex text-amber-400">★★★★★</div>
-        <p class="text-slate-600 italic text-sm leading-relaxed">"${t.text}"</p>
-        <div class="pt-3 border-t border-slate-100 font-semibold text-sm text-slate-800">${t.name}</div>
+        <p class="text-slate-600 italic text-sm leading-relaxed">"${escapeHtml(t.text || t.review || '')}"</p>
+        <div class="pt-3 border-t border-slate-100 font-semibold text-sm text-slate-800">${escapeHtml(t.name || t.customerName || '')}</div>
       </div>`
     )
     .join('\n')
@@ -113,7 +120,7 @@ export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _cur
   <section id="about" class="py-20 px-6 bg-white border-y border-slate-100">
     <div class="max-w-4xl mx-auto text-center space-y-6">
       <h2 class="text-3xl font-extrabold text-slate-900">Tentang ${businessName}</h2>
-      <p class="text-lg text-slate-600 leading-relaxed">${about.description || ''}</p>
+      <p class="text-lg text-slate-600 leading-relaxed">${escapeHtml(about.description || about.story || '')}</p>
     </div>
   </section>
 
@@ -136,8 +143,8 @@ export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _cur
         ${ctaText}
       </a>
       <div class="pt-8 text-sm text-white/70 space-y-1">
-        ${contact.address ? `<p>📍 ${contact.address}</p>` : ''}
-        ${contact.instagram ? `<p>📸 ${contact.instagram}</p>` : ''}
+        ${contact.address ? `<p>📍 ${escapeHtml(contact.address)}</p>` : ''}
+        ${contact.instagram ? `<p>📸 ${escapeHtml(contact.instagram)}</p>` : ''}
       </div>
     </div>
   </section>

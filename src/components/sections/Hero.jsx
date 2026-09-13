@@ -16,6 +16,7 @@
  */
 import Button from '../ui/Button'
 import Container from '../ui/Container'
+import { generateWhatsappUrl } from '../../lib/templateSelector'
 
 const WhatsAppIcon = () => (
   <svg
@@ -37,6 +38,7 @@ export default function Hero({
   className = '',
   style = {},
   _theme = 'services',
+  mobilePreview = false,
 }) {
   const {
     title = 'Selamat Datang',
@@ -48,26 +50,24 @@ export default function Hero({
   const tagline = meta.tagline || data.tagline || ''
   const { whatsappNumber = '' } = contact
 
-  const waUrl = whatsappNumber
-    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(ctaWhatsappMessage)}`
-    : '#'
+  const waUrl = generateWhatsappUrl(whatsappNumber, ctaWhatsappMessage)
 
   return (
     <div className={['relative overflow-hidden', className].join(' ')} style={style}>
       <Container>
-        <div className="flex flex-col items-center text-center py-20 md:py-32 gap-6 relative z-10">
+        <div className={['flex flex-col items-center text-center gap-6 relative z-10', mobilePreview ? 'py-16' : 'py-20 md:py-32'].join(' ')}>
           {tagline && (
             <div className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase bg-white/15 backdrop-blur-md border border-white/20 text-white/95 shadow-sm">
               {tagline}
             </div>
           )}
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight max-w-4xl tracking-tight text-white drop-shadow-sm">
+          <h1 className={[mobilePreview ? 'text-4xl' : 'text-4xl sm:text-5xl md:text-6xl', 'font-extrabold leading-tight max-w-4xl tracking-tight text-white drop-shadow-sm'].join(' ')}>
             {title}
           </h1>
 
           {subtitle && (
-            <p className="text-base sm:text-lg md:text-xl max-w-2xl text-white/90 leading-relaxed font-normal">
+            <p className={[mobilePreview ? 'text-base' : 'text-base sm:text-lg md:text-xl', 'max-w-2xl text-white/90 leading-relaxed font-normal'].join(' ')}>
               {subtitle}
             </p>
           )}

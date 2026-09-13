@@ -16,7 +16,7 @@ import Container from '../ui/Container'
 import { generateWhatsappUrl } from '../../lib/templateSelector'
 
 // Bold navbar
-function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#6d28d9' }) {
+function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#6d28d9', isMobilePreview = false }) {
   const waUrl = generateWhatsappUrl(
     whatsappNumber,
     ctaWhatsappMessage || 'Halo, saya ingin memesan produk dari ' + businessName
@@ -33,7 +33,7 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
           <span className="truncate max-w-[200px] sm:max-w-xs">{businessName}</span>
         </a>
         <div className="flex items-center gap-4">
-          <nav className="hidden md:flex items-center gap-5 text-sm font-semibold text-white/80">
+          <nav className={[isMobilePreview ? 'hidden' : 'hidden md:flex', 'items-center gap-5 text-sm font-semibold text-white/80'].join(' ')}>
             <a href="#hero" className="hover:text-white transition-colors">Beranda</a>
             <a href="#services" className="hover:text-white transition-colors">Koleksi</a>
             <a href="#advantages" className="hover:text-white transition-colors">Keunggulan</a>
@@ -104,7 +104,7 @@ function Footer({ businessName, tagline, instagram, _primaryColor = '#6d28d9' })
   )
 }
 
-export default function RetailTemplate({ data = {}, theme }) {
+export default function RetailTemplate({ data = {}, theme, viewport = 'desktop' }) {
   const {
     meta = {},
     hero = {},
@@ -140,6 +140,7 @@ export default function RetailTemplate({ data = {}, theme }) {
         whatsappNumber={contact.whatsappNumber}
         ctaWhatsappMessage={hero.ctaWhatsappMessage}
         primaryColor={primaryColor}
+        isMobilePreview={viewport === 'mobile'}
       />
 
       {/* Hero — bold vibrant with Tagline Pill */}
@@ -151,6 +152,7 @@ export default function RetailTemplate({ data = {}, theme }) {
           className="text-white min-h-[65vh] flex flex-col justify-center"
           style={{ backgroundColor: primaryColor }}
           _theme="retail"
+          mobilePreview={viewport === 'mobile'}
         />
       </div>
 
@@ -162,6 +164,7 @@ export default function RetailTemplate({ data = {}, theme }) {
           sectionDesc="Koleksi terbaik dengan standar mutu tinggi yang siap dikirim langsung ke rumah Anda"
           className="bg-slate-50 text-slate-900"
           cardVariant="default"
+          accentColor={_accentColor}
         />
       </div>
 
@@ -182,6 +185,7 @@ export default function RetailTemplate({ data = {}, theme }) {
         <Testimonials
           data={testimonials}
           className="bg-slate-50 text-slate-900"
+          accentColor={_accentColor}
         />
       </div>
 

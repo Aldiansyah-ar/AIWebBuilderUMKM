@@ -19,7 +19,7 @@ import {
   Circle,
 } from 'lucide-react'
 
-import WebsiteRenderer from './components/WebsiteRenderer'
+import SandboxPreview from './components/SandboxPreview'
 import { mockDataByTemplate } from './data/mockWebsiteData'
 import {
   TEMPLATE_FNB,
@@ -557,15 +557,17 @@ export default function App() {
               className={[
                 'transition-all duration-300 ease-in-out bg-white shadow-xl overflow-hidden',
                 activeViewport === 'mobile'
-                  ? 'w-[390px] rounded-[2.5rem] ring-8 ring-slate-800 shadow-2xl max-h-[82vh] overflow-y-auto my-auto'
+                  ? 'w-[390px] h-[82vh] rounded-[2.5rem] ring-8 ring-slate-800 shadow-2xl my-auto'
                   : 'w-full max-w-6xl rounded-xl border border-slate-200/80',
               ].join(' ')}
             >
-              {/* Actual Live Website Rendered Component */}
-              <WebsiteRenderer
+              {/* Sandboxed preview: styles stay isolated from the workspace. */}
+              <SandboxPreview
                 templateId={activeTemplate}
                 data={websiteData}
                 theme={activeTheme}
+                viewport={activeViewport}
+                className={activeViewport === 'mobile' ? 'min-h-0' : 'min-h-[720px]'}
               />
             </div>
           </div>

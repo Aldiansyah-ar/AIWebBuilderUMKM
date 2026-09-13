@@ -57,7 +57,7 @@ function LoadingState() {
   )
 }
 
-export default function WebsiteRenderer({ templateId, data, theme }) {
+export default function WebsiteRenderer({ templateId, data, theme, viewport = 'desktop' }) {
   // Guard: data belum tersedia (loading state dari LLM)
   if (!data || !data.meta) {
     return <LoadingState />
@@ -74,6 +74,7 @@ export default function WebsiteRenderer({ templateId, data, theme }) {
     <TemplateComponent
       data={data}
       theme={theme}
+      viewport={viewport}
     />
   )
 }

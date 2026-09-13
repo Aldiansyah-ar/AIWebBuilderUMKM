@@ -9,13 +9,14 @@ import Section from '../ui/Section'
 import Container from '../ui/Container'
 import Card from '../ui/Card'
 
-function StarRating({ rating = 5 }) {
+function StarRating({ rating = 5, accentColor }) {
   return (
     <div className="flex gap-0.5" aria-label={`Rating ${rating} dari 5`}>
       {Array.from({ length: 5 }).map((_, i) => (
         <svg
           key={i}
-          className={['w-4 h-4', i < rating ? 'text-amber-400' : 'text-slate-200'].join(' ')}
+          className={['w-4 h-4', i < rating ? '' : 'text-slate-200'].join(' ')}
+          style={i < rating ? { color: accentColor } : undefined}
           fill="currentColor"
           viewBox="0 0 20 20"
           aria-hidden="true"
@@ -27,33 +28,35 @@ function StarRating({ rating = 5 }) {
   )
 }
 
-function TestimonialCard({ item }) {
-  const { name, text, rating = 5 } = item
+function TestimonialCard({ item, accentColor }) {
+  const { name, text, customerName, review, rating = 5 } = item
+  const customer = name || customerName || 'Pelanggan'
+  const quote = text || review || ''
   return (
     <Card hover className="flex flex-col gap-4">
-      <StarRating rating={rating} />
+      <StarRating rating={rating} accentColor={accentColor} />
       <p className="text-slate-600 italic leading-relaxed flex-1">
-        &ldquo;{text}&rdquo;
+        &ldquo;{quote}&rdquo;
       </p>
       <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
         {/* Avatar placeholder */}
         <div className="w-9 h-9 rounded-full bg-current opacity-20 flex items-center justify-center text-sm font-bold text-white shrink-0">
-          {name?.[0]?.toUpperCase() ?? '?'}
+          {customer[0]?.toUpperCase() ?? '?'}
         </div>
-        <span className="font-semibold text-slate-800 text-sm">{name}</span>
+        <span className="font-semibold text-slate-800 text-sm">{customer}</span>
       </div>
     </Card>
   )
 }
 
-export default function Testimonials({ data = [], className = '' }) {
+export default function Testimonials({ data = [], className = '', accentColor }) {
   if (!data || data.length === 0) return null
 
   return (
     <Section id="testimonials" className={className}>
       <Container>
         <div className="text-center mb-12 space-y-3">
-          <h2 className="text-3xl md:text-4xl font-bold">Apa Kata Pelanggan</h2>
+          <h2 className="text-3xl md:text-4xl font-bold" style={{ color: accentColor }}>Apa Kata Pelanggan</h2>
           <p className="text-slate-500 max-w-lg mx-auto">
             Pengalaman nyata dari pelanggan setia kami
           </p>
@@ -61,7 +64,7 @@ export default function Testimonials({ data = [], className = '' }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {data.map((item, i) => (
-            <TestimonialCard key={item.name ?? i} item={item} />
+            <TestimonialCard key={item.name ?? item.customerName ?? i} item={item} accentColor={accentColor} />
           ))}
         </div>
       </Container>

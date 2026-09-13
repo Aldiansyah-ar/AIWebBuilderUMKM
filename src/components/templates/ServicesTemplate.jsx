@@ -15,7 +15,7 @@ import Contact from '../sections/Contact'
 import { generateWhatsappUrl } from '../../lib/templateSelector'
 
 // Minimal navbar untuk template profesional
-function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#1e40af' }) {
+function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#1e40af', isMobilePreview = false }) {
   const waUrl = generateWhatsappUrl(
     whatsappNumber,
     ctaWhatsappMessage || 'Halo, saya ingin konsultasi gratis mengenai layanan ' + businessName
@@ -30,7 +30,7 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
         </a>
 
         <div className="flex items-center gap-6">
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+          <nav className={[isMobilePreview ? 'hidden' : 'hidden md:flex', 'items-center gap-6 text-sm font-medium text-slate-600'].join(' ')}>
             <a href="#hero" className="hover:text-blue-600 transition-colors">Beranda</a>
             <a href="#services" className="hover:text-blue-600 transition-colors">Layanan</a>
             <a href="#about" className="hover:text-blue-600 transition-colors">Tentang</a>
@@ -68,7 +68,7 @@ function Footer({ businessName, tagline, _primaryColor = '#1e40af' }) {
   )
 }
 
-export default function ServicesTemplate({ data = {}, theme }) {
+export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop' }) {
   const {
     meta = {},
     hero = {},
@@ -107,6 +107,7 @@ export default function ServicesTemplate({ data = {}, theme }) {
         whatsappNumber={contact.whatsappNumber}
         ctaWhatsappMessage={hero.ctaWhatsappMessage}
         primaryColor={primaryColor}
+        isMobilePreview={viewport === 'mobile'}
       />
 
       {/* Hero — clean gradient with dynamic primary */}
@@ -118,6 +119,7 @@ export default function ServicesTemplate({ data = {}, theme }) {
           className="text-white min-h-[65vh] flex flex-col justify-center"
           style={{ backgroundColor: primaryColor }}
           _theme="services"
+          mobilePreview={viewport === 'mobile'}
         />
       </div>
 
@@ -129,6 +131,7 @@ export default function ServicesTemplate({ data = {}, theme }) {
           sectionDesc="Solusi komprehensif dan terukur untuk mendorong percepatan bisnis Anda"
           className="bg-slate-50 text-blue-600"
           cardVariant="default"
+          accentColor={_accentColor}
         />
       </div>
 
@@ -146,6 +149,7 @@ export default function ServicesTemplate({ data = {}, theme }) {
         <Testimonials
           data={testimonials}
           className="bg-slate-50 text-blue-600"
+          accentColor={_accentColor}
         />
       </div>
 
