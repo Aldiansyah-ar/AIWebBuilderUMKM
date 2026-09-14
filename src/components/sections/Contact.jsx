@@ -20,6 +20,7 @@
 import Section from '../ui/Section'
 import Container from '../ui/Container'
 import Button from '../ui/Button'
+import { formatWhatsappNumber, generateWhatsappUrl, isValidWhatsappNumber } from '../../lib/templateSelector'
 
 const WhatsAppIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
@@ -56,9 +57,9 @@ export default function Contact({ data = {}, hero = {}, meta = {}, className = '
 
   const { businessName = 'Kami' } = meta
 
-  const waUrl = whatsappNumber
-    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(ctaWhatsappMessage)}`
-    : '#'
+  const normalizedWhatsapp = formatWhatsappNumber(whatsappNumber)
+  const hasValidWhatsapp = isValidWhatsappNumber(whatsappNumber)
+  const waUrl = generateWhatsappUrl(whatsappNumber, ctaWhatsappMessage)
 
   return (
     <Section id="contact" className={className}>
@@ -76,8 +77,10 @@ export default function Contact({ data = {}, hero = {}, meta = {}, className = '
               href={waUrl}
               variant="whatsapp"
               size="lg"
-              target="_blank"
-              rel="noopener noreferrer"
+              target={hasValidWhatsapp ? '_blank' : undefined}
+              rel={hasValidWhatsapp ? 'noopener noreferrer' : undefined}
+              aria-disabled={!hasValidWhatsapp}
+              className={!hasValidWhatsapp ? 'pointer-events-none opacity-50' : ''}
             >
               <WhatsAppIcon />
               {ctaText}
@@ -87,7 +90,7 @@ export default function Contact({ data = {}, hero = {}, meta = {}, className = '
           {/* Info column */}
           <div className="bg-slate-50 rounded-2xl p-6 space-y-5">
             <h3 className="font-semibold text-slate-800">Informasi Kontak</h3>
-            <ContactItem icon="📞" label="WhatsApp" value={whatsappNumber ? `+${whatsappNumber}` : ''} />
+            <ContactItem icon="📞" label="WhatsApp" value={hasValidWhatsapp ? `+${normalizedWhatsapp}` : 'Nomor WhatsApp belum valid'} />
             <ContactItem icon="📍" label="Alamat" value={address} />
             <ContactItem icon="📸" label="Instagram" value={instagram} />
             <ContactItem icon="✉️" label="Email" value={email} />

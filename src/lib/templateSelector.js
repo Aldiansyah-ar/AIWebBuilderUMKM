@@ -59,6 +59,17 @@ export function determineTemplate(categoryOrText = '') {
 
   const text = String(categoryOrText).toLowerCase()
 
+  // Service phrases take priority over product keywords.  For example,
+  // "cuci sepatu" is a service, even though it contains "sepatu".
+  const serviceKeywords = [
+    'jasa', 'konsultan', 'konsultasi', 'barbershop', 'barber', 'cuci sepatu',
+    'laundry', 'servis', 'service', 'fotografi', 'fotografer', 'desain',
+    'kursus', 'pelatihan', 'perawatan', 'salon', 'bengkel', 'digital marketing',
+  ]
+  if (serviceKeywords.some((k) => text.includes(k))) {
+    return TEMPLATE_SERVICES
+  }
+
   // F&B / Kuliner keywords
   const fnbKeywords = [
     'kopi', 'coffee', 'cafe', 'kafe', 'warung', 'kuliner', 'fnb', 'makan', 'minum',
@@ -87,14 +98,19 @@ export function determineTemplate(categoryOrText = '') {
  * Format nomor WhatsApp ke standar internasional (contoh: 08123... -> 628123...)
  */
 export function formatWhatsappNumber(num = '') {
-  const clean = String(num).replace(/[^0-9]/g, '')
+  const clean = String(num).replace(/[^0-9]/g, '').replace(/^00/, '')
   if (clean.startsWith('0')) {
     return `62${clean.slice(1)}`
   }
   if (clean.startsWith('8')) {
     return `62${clean}`
   }
-  return clean || '628123456789'
+  return clean
+}
+
+/** Validate Indonesian WhatsApp numbers after normalisation. */
+export function isValidWhatsappNumber(num = '') {
+  return /^628\d{7,12}$/.test(formatWhatsappNumber(num))
 }
 
 /**
@@ -104,5 +120,7 @@ export function generateWhatsappUrl(phoneNumber = '', message = '') {
   const formattedPhone = formatWhatsappNumber(phoneNumber)
   const defaultMsg = 'Halo, saya tertarik dengan layanan/produk Anda'
   const text = encodeURIComponent(message || defaultMsg)
-  return `https://wa.me/${formattedPhone}?text=${text}`
+  return isValidWhatsappNumber(formattedPhone)
+    ? `https://wa.me/${formattedPhone}?text=${text}`
+    : '#'
 }
