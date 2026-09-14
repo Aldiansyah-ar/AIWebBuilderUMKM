@@ -16,7 +16,7 @@
  */
 import Button from '../ui/Button'
 import Container from '../ui/Container'
-import { generateWhatsappUrl } from '../../lib/templateSelector'
+import { generateWhatsappUrl, isValidWhatsappNumber } from '../../lib/templateSelector'
 
 const WhatsAppIcon = () => (
   <svg
@@ -50,6 +50,7 @@ export default function Hero({
   const tagline = meta.tagline || data.tagline || ''
   const { whatsappNumber = '' } = contact
 
+  const hasValidWhatsapp = isValidWhatsappNumber(whatsappNumber)
   const waUrl = generateWhatsappUrl(whatsappNumber, ctaWhatsappMessage)
 
   return (
@@ -76,9 +77,13 @@ export default function Hero({
             href={waUrl}
             variant="whatsapp"
             size="lg"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all text-base font-bold py-3.5 px-7"
+            target={hasValidWhatsapp ? '_blank' : undefined}
+            rel={hasValidWhatsapp ? 'noopener noreferrer' : undefined}
+            aria-disabled={!hasValidWhatsapp}
+            className={[
+              'shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all text-base font-bold py-3.5 px-7',
+              !hasValidWhatsapp ? 'pointer-events-none opacity-50' : '',
+            ].join(' ')}
           >
             <WhatsAppIcon />
             {ctaText}

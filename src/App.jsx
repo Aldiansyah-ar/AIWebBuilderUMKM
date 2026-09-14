@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 
 import SandboxPreview from './components/SandboxPreview'
+import ToastContainer from './components/ui/Toast'
 import { mockDataByTemplate } from './data/mockWebsiteData'
 import {
   TEMPLATE_FNB,
@@ -29,6 +30,25 @@ import {
   determineTemplate,
 } from './lib/templateSelector'
 import { exportWebsiteToHtml } from './lib/exportWebsite'
+
+// Contoh deskripsi bisnis untuk demo evaluator (TSK-06B / US-10)
+const EXAMPLE_BUSINESS_PROMPTS = [
+  {
+    emoji: '🍢',
+    label: 'Bakso',
+    text: 'Warung Bakso Pak Slamet, jual bakso urat dan mie ayam pedas mantap di Malang, wa 08123456789',
+  },
+  {
+    emoji: '💈',
+    label: 'Barbershop',
+    text: 'Barbershop Gentleman Cut, potong rambut pria modern dan cukur jenggot rapi di Jakarta, wa 08199988877',
+  },
+  {
+    emoji: '👟',
+    label: 'Cuci Sepatu',
+    text: 'CleanKicks Laundry Sepatu, jasa cuci sepatu premium dan deep clean sneakers di Bandung, wa 08561234567',
+  },
+]
 
 export default function App() {
   // Active template state (Default: F&B as displayed in image.png)
@@ -71,6 +91,16 @@ export default function App() {
   const [inputPrompt, setInputPrompt] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const chatBottomRef = useRef(null)
+
+  // Toast notifications (TSK-06B / Hari 7)
+  const [toasts, setToasts] = useState([])
+  const showToast = (type, message) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    setToasts((prev) => [...prev, { id, type, message }])
+  }
+  const dismissToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }
 
   // Scroll chat to bottom on new messages
   useEffect(() => {
@@ -201,7 +231,15 @@ export default function App() {
         responseText = `Menu baru "${newItem.name}" (${newItem.priceEstimate}) berhasil ditambahkan ke daftar katalog menu!`
       }
       // 4. Check WhatsApp update
-      else if (lower.includes('wa') || lower.includes('whatsapp') || lower.includes('nomor')) {
+      // NOTE: bare "wa" is deliberately excluded — it false-matches substrings like
+      // "warung"/"warna", which would misroute business-description prompts (e.g. TC-01's
+      // "Warung Kopi Sejahtera ... wa 08123456789") away from template auto-detection below.
+      else if (
+        lower.includes('whatsapp') ||
+        lower.includes('nomor') ||
+        lower.includes('ganti wa') ||
+        lower.includes('update wa')
+      ) {
         const newWa = '6281299887766'
         setWebsiteData((prev) => ({
           ...prev,
@@ -244,9 +282,15 @@ export default function App() {
     }, 450)
   }
 
-  // Handle Export / Download Website
+  // Handle Export / Download Website (TSK-06B: feedback via toast)
   const handleDownload = () => {
-    exportWebsiteToHtml(websiteData, activeTemplate, activeTheme)
+    try {
+      exportWebsiteToHtml(websiteData, activeTemplate, activeTheme)
+      showToast('success', `Website "${websiteData?.meta?.businessName || 'UMKM'}" berhasil diunduh!`)
+    } catch (err) {
+      console.error('Gagal export website:', err)
+      showToast('error', 'Gagal mengunduh website. Silakan coba lagi.')
+    }
   }
 
   const currentMeta = TEMPLATE_META[activeTemplate]
@@ -415,6 +459,26 @@ export default function App() {
             <div ref={chatBottomRef} />
           </div>
 
+          {/* Contoh Prompt / Quick-fill Demo (TSK-06B / US-10) */}
+          <div className="px-2.5 pt-2.5 bg-white border-t border-slate-100 shrink-0">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+              Contoh Deskripsi Bisnis (Demo):
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {EXAMPLE_BUSINESS_PROMPTS.map((example) => (
+                <button
+                  key={example.label}
+                  onClick={() => handleSendPrompt(example.text)}
+                  disabled={isTyping}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200/80 hover:bg-blue-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={example.text}
+                >
+                  {example.emoji} {example.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Quick Options (Pilihan Cepat) */}
           <div className="p-2.5 bg-white border-t border-slate-100 shrink-0">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
@@ -573,6 +637,9 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* Toast Notifications (TSK-06B / Hari 7) */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

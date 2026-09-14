@@ -13,10 +13,11 @@ import Services from '../sections/Services'
 import Testimonials from '../sections/Testimonials'
 import Contact from '../sections/Contact'
 import Container from '../ui/Container'
-import { generateWhatsappUrl } from '../../lib/templateSelector'
+import { generateWhatsappUrl, isValidWhatsappNumber } from '../../lib/templateSelector'
 
 // Bold navbar
 function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#6d28d9', isMobilePreview = false }) {
+  const hasValidWhatsapp = isValidWhatsappNumber(whatsappNumber)
   const waUrl = generateWhatsappUrl(
     whatsappNumber,
     ctaWhatsappMessage || 'Halo, saya ingin memesan produk dari ' + businessName
@@ -42,9 +43,13 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
           </nav>
           <a
             href={waUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-full shadow-sm hover:shadow transition-all active:scale-95"
+            target={hasValidWhatsapp ? '_blank' : undefined}
+            rel={hasValidWhatsapp ? 'noopener noreferrer' : undefined}
+            aria-disabled={!hasValidWhatsapp}
+            className={[
+              'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-full shadow-sm hover:shadow transition-all active:scale-95',
+              !hasValidWhatsapp ? 'pointer-events-none opacity-50' : '',
+            ].join(' ')}
           >
             <span>Belanja via WA</span>
           </a>
