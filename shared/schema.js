@@ -1,3 +1,6 @@
+// UMKMWebsiteState contract (SKILL.md section 5) — shared by the backend
+// (server/index.js: validates LLM output, supplies fallbacks) and the
+// frontend (src/store/websiteStore.jsx: loadFallback for the offline path).
 // ponytail: manual validator — no zod/ajv, switch to zod if schema >10 fields or nested unions
 const HEX_RE = /^#([A-Fa-f0-9]{6})$/;
 const TEMPLATE_IDS = ["template-services", "template-fnb", "template-retail"];

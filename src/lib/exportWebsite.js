@@ -1,8 +1,9 @@
 /**
- * exportWebsite.js
- *
- * Export generator helper for bundling the generated website into a standalone HTML file.
+ * exportWebsite.js — TSK-06A (Dev 1B): standalone ZIP bundle generator, with
+ * an HTML-only download and a clipboard-copy fallback (Plan B: "ZIP korup ->
+ * tombol fallback 'Salin Kode HTML'").
  */
+import JSZip from 'jszip'
 import { generateWhatsappUrl } from './templateSelector'
 
 const escapeHtml = (value = '') => String(value)
@@ -12,7 +13,7 @@ const escapeHtml = (value = '') => String(value)
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;')
 
-export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _currentTheme = 'modern-warm') {
+function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
   const {
     meta = {},
     hero = {},
@@ -156,13 +157,49 @@ export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb', _cur
 </body>
 </html>`
 
-  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+  const slug = businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'umkm-website'
+  return { html: htmlContent, slug }
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-website.html`
+  a.download = filename
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+/** Single standalone HTML file download (used as part of the clipboard/zip fallback chain). */
+export function exportWebsiteToHtml(data = {}, templateId = 'template-fnb') {
+  const { html, slug } = buildStandaloneHtml(data, templateId)
+  downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${slug}-website.html`)
+}
+
+/**
+ * TSK-06A: bundle the standalone site into a downloadable .zip (HTML + a
+ * short README describing the WhatsApp CTA), satisfying US-09's "Unduh
+ * bundle ZIP" acceptance criteria.
+ */
+export async function exportWebsiteToZip(data = {}, templateId = 'template-fnb') {
+  const { html, slug } = buildStandaloneHtml(data, templateId)
+  const zip = new JSZip()
+  zip.file('index.html', html)
+  zip.file(
+    'README.txt',
+    `Website ${data?.meta?.businessName || 'UMKM'}\n\nCara pakai:\n1. Ekstrak file ini.\n2. Buka index.html di browser, atau upload ke hosting statis mana pun.\n3. Tailwind CSS dimuat via CDN — tidak perlu build step tambahan.\n\nDibuat dengan AI UMKM Website Builder.`
+  )
+  const blob = await zip.generateAsync({ type: 'blob' })
+  downloadBlob(blob, `${slug}-website.zip`)
+}
+
+/**
+ * Fallback for when ZIP generation fails (Plan B, TSK-06A): copy the raw
+ * standalone HTML straight to the clipboard so the user isn't blocked.
+ */
+export async function copyHtmlToClipboard(data = {}, templateId = 'template-fnb') {
+  const { html } = buildStandaloneHtml(data, templateId)
+  await navigator.clipboard.writeText(html)
 }
