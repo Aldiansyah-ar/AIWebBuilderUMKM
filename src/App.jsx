@@ -17,6 +17,7 @@ import {
   Send,
   CheckCircle2,
   Circle,
+  UploadCloud,
 } from 'lucide-react'
 
 import SandboxPreview from './components/SandboxPreview'
@@ -29,7 +30,9 @@ import {
   TEMPLATE_META,
   determineTemplate,
 } from './lib/templateSelector'
-import { exportWebsiteToHtml } from './lib/exportWebsite'
+import { exportWebsiteToZip, copyHtmlToClipboard } from './lib/exportWebsite'
+import { useWebsite } from './store/websiteStore.jsx'
+import { generateWebsite, reviseWebsite } from './lib/websiteController'
 
 // Contoh deskripsi bisnis untuk demo evaluator (TSK-06B / US-10)
 const EXAMPLE_BUSINESS_PROMPTS = [
@@ -56,11 +59,25 @@ export default function App() {
   const [activeTheme, setActiveTheme] = useState('modern-warm')
   const [activeViewport, setActiveViewport] = useState('desktop')
 
-  // Website data state for each template
-  const [websiteData, setWebsiteData] = useState(() => {
-    // Clone initial mock data to allow real-time mutations
-    return JSON.parse(JSON.stringify(mockDataByTemplate[TEMPLATE_FNB]))
-  })
+  // Website data now lives in the backend state manager (TSK-03B), which
+  // persists it to sessionStorage so a reload doesn't lose AI-driven edits.
+  const { website: websiteData, setWebsite: setWebsiteData, patchWebsite, appendServiceItem } = useWebsite()
+
+  // First mount: seed the F&B demo dataset if no session was persisted: else
+  // (a reload with sessionStorage data, or an AI-generated templateId) sync
+  // the template selector to match what was actually persisted, so a reload
+  // doesn't silently snap the preview back to F&B while the persisted
+  // content is for a different template (TSK-03B).
+  useEffect(() => {
+    if (!websiteData) {
+      const seed = JSON.parse(JSON.stringify(mockDataByTemplate[TEMPLATE_FNB]))
+      seed.templateId = TEMPLATE_FNB
+      setWebsiteData(seed, { snapshot: false })
+    } else if (websiteData.templateId && TEMPLATE_META[websiteData.templateId] && websiteData.templateId !== activeTemplate) {
+      setActiveTemplate(websiteData.templateId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Chat conversation state matching reference design
   const [messages, setMessages] = useState([
@@ -115,6 +132,7 @@ export default function App() {
 
     // Load template-specific data
     const baseData = JSON.parse(JSON.stringify(mockDataByTemplate[templateId]))
+    baseData.templateId = templateId // stamped so a reload can restore the right template (TSK-03B)
     const currentThemes = TEMPLATE_META[templateId].themes
     const themeObj = currentThemes.find((t) => t.id === defaultTheme) || currentThemes[0]
 
@@ -155,8 +173,10 @@ export default function App() {
     }
   }
 
-  // Process revision prompt (TSK-05D / Hari 6)
-  const handleSendPrompt = (promptText) => {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  // Process revision prompt (TSK-05D / Hari 6 UI; TSK-02B/03B/05B backend orchestration)
+  const handleSendPrompt = async (promptText) => {
     const text = (promptText || inputPrompt).trim()
     if (!text) return
 
@@ -171,10 +191,23 @@ export default function App() {
     setInputPrompt('')
     setIsTyping(true)
 
-    // Simulate AI revision processing
-    setTimeout(() => {
-      const lower = text.toLowerCase()
-      let responseText = ''
+    const lower = text.toLowerCase()
+    let responseText = ''
+
+    // Fast, deterministic local actions (1-4) never touch the network —
+    // no reason to spend a Gemini call on a plain palette swap.
+    const isDeterministicAction =
+      lower.includes('cokelat') || lower.includes('klasik') || lower.includes('modern warm') ||
+      lower.includes('amber') || lower.includes('hangat') || lower.includes('warm amber') ||
+      lower.includes('hijau') || lower.includes('sage') || lower.includes('toska') ||
+      lower.includes('biru') || lower.includes('corporate') || lower.includes('navy') ||
+      lower.includes('ungu') || lower.includes('violet') || lower.includes('retail') ||
+      lower.includes('headline') || lower.includes('judul') || lower.includes('slogan') ||
+      lower.includes('menu') || lower.includes('tambah') || lower.includes('produk') ||
+      lower.includes('whatsapp') || lower.includes('nomor') || lower.includes('ganti wa') || lower.includes('update wa')
+
+    if (isDeterministicAction) {
+      await wait(450)
 
       // 1. Check color/theme revision
       if (lower.includes('cokelat') || lower.includes('klasik') || lower.includes('modern warm')) {
@@ -203,17 +236,10 @@ export default function App() {
       else if (lower.includes('headline') || lower.includes('judul') || lower.includes('slogan')) {
         const newTitle = 'Sensasi Kopi Autentik & Ruang Kreatif'
         const newSubtitle = 'Ruang temu hangat untuk berdiskusi, bekerja santai, dan menikmati racikan biji kopi terbaik Nusantara.'
-        setWebsiteData((prev) => ({
-          ...prev,
-          hero: {
-            ...prev.hero,
-            title: newTitle,
-            subtitle: newSubtitle,
-          },
-        }))
+        patchWebsite({ hero: { ...websiteData.hero, title: newTitle, subtitle: newSubtitle } })
         responseText = `Headline berhasil diperbarui menjadi "${newTitle}". Susunan kalimat dioptimalkan untuk daya tarik maksimal!`
       }
-      // 3. Check menu/product addition
+      // 3. Check menu/product addition — dedicated append action (TSK-05B), not a full replace
       else if (lower.includes('menu') || lower.includes('tambah') || lower.includes('produk')) {
         const newItem = {
           name: 'Pisang Goreng Keju Crispy',
@@ -221,13 +247,7 @@ export default function App() {
           priceEstimate: 'Rp15.000',
           icon: '🍌',
         }
-        setWebsiteData((prev) => {
-          const currentServices = prev.services || []
-          return {
-            ...prev,
-            services: [newItem, ...currentServices],
-          }
-        })
+        appendServiceItem(newItem)
         responseText = `Menu baru "${newItem.name}" (${newItem.priceEstimate}) berhasil ditambahkan ke daftar katalog menu!`
       }
       // 4. Check WhatsApp update
@@ -241,57 +261,77 @@ export default function App() {
         lower.includes('update wa')
       ) {
         const newWa = '6281299887766'
-        setWebsiteData((prev) => ({
-          ...prev,
-          contact: {
-            ...prev.contact,
-            whatsappNumber: newWa,
-          },
-        }))
+        patchWebsite({ contact: { ...websiteData.contact, whatsappNumber: newWa } })
         responseText = `Nomor WhatsApp CTA berhasil dihubungkan ke +${newWa}. Semua tombol pemesanan siap digunakan!`
       }
-      // 5. General intelligent revision
-      else {
-        // Detect category if user entered business name
-        const detected = determineTemplate(text)
-        if (detected !== activeTemplate) {
+    } else {
+      // General path (US-05/US-07): try the real backend/LLM route first
+      // (TSK-01B/02B — retry-once + fallback happens server-side), then fall
+      // back to deterministic template detection so the demo never stalls
+      // when no GEMINI_API_KEY is configured (see server/index.js).
+      const detected = determineTemplate(text)
+      const isNewBusinessDescription = detected !== activeTemplate
+
+      const result = isNewBusinessDescription
+        ? await generateWebsite(text)
+        : await reviseWebsite(websiteData, text)
+
+      if (result.ok) {
+        if (isNewBusinessDescription) handleSelectTemplate(detected)
+        patchWebsite(result.data)
+        if (result.data.templateId) setActiveTemplate(result.data.templateId)
+        responseText = isNewBusinessDescription
+          ? `Draft website baru berhasil dibuat oleh AI untuk kategori ${TEMPLATE_META[detected].name}!`
+          : `Permintaan revisi "${text}" berhasil diterapkan oleh AI!`
+      } else {
+        // Offline/failure fallback — same UX as before the backend integration.
+        if (result.error && result.error !== 'not_configured') {
+          showToast('info', 'AI tidak merespons, menggunakan mode offline.')
+        }
+        if (isNewBusinessDescription) {
           handleSelectTemplate(detected)
           responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detected].name}. Semua komponen diperbarui!`
         } else {
-          // Adjust tagline or general copy
-          setWebsiteData((prev) => ({
-            ...prev,
-            meta: {
-              ...prev.meta,
-              tagline: text.slice(0, 45),
-            },
-          }))
+          patchWebsite({ meta: { ...websiteData.meta, tagline: text.slice(0, 45) } })
           responseText = `Permintaan revisi "${text}" telah diterapkan pada konten website secara real-time!`
         }
       }
+    }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `bot-${Date.now()}`,
-          sender: 'assistant',
-          text: responseText,
-        },
-      ])
-      setIsTyping(false)
-    }, 450)
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `bot-${Date.now()}`,
+        sender: 'assistant',
+        text: responseText,
+      },
+    ])
+    setIsTyping(false)
   }
 
-  // Handle Export / Download Website (TSK-06B: feedback via toast)
-  const handleDownload = () => {
+  // Handle Export / Download Website as a .zip bundle (TSK-06A), with a
+  // clipboard-copy fallback if zip generation fails (Plan B contingency).
+  const handleDownload = async () => {
     try {
-      exportWebsiteToHtml(websiteData, activeTemplate, activeTheme)
-      showToast('success', `Website "${websiteData?.meta?.businessName || 'UMKM'}" berhasil diunduh!`)
+      await exportWebsiteToZip(websiteData, activeTemplate)
+      showToast('success', `Website "${websiteData?.meta?.businessName || 'UMKM'}" berhasil diunduh (.zip)!`)
     } catch (err) {
-      console.error('Gagal export website:', err)
-      showToast('error', 'Gagal mengunduh website. Silakan coba lagi.')
+      console.error('Gagal export ZIP, mencoba fallback clipboard:', err)
+      try {
+        await copyHtmlToClipboard(websiteData, activeTemplate)
+        showToast('info', 'Gagal membuat ZIP — kode HTML disalin ke clipboard sebagai gantinya.')
+      } catch (clipboardErr) {
+        console.error('Fallback clipboard juga gagal:', clipboardErr)
+        showToast('error', 'Gagal mengunduh website. Silakan coba lagi.')
+      }
     }
   }
+
+  // TSK-06D (Could-Have / stretch goal): one-click static publish needs a
+  // deploy provider (Vercel/Supabase/Firebase) credential we don't have
+  // configured here. Per the task's own Plan B ("Publish gagal -> nonaktifkan
+  // tombol, fokus pada unduhan ZIP"), the button is shown but disabled
+  // rather than faking a deploy.
 
   const currentMeta = TEMPLATE_META[activeTemplate]
   const currentThemes = currentMeta.themes
@@ -345,11 +385,21 @@ export default function App() {
             })}
           </div>
 
+          {/* Publish Button (TSK-06D — stretch goal, disabled: no deploy provider configured) */}
+          <button
+            disabled
+            className="flex items-center gap-1.5 bg-slate-800/60 border border-slate-700/60 text-slate-400 text-xs font-semibold px-3 sm:px-3.5 py-1.5 rounded-lg cursor-not-allowed"
+            title="Publish otomatis (stretch goal) — segera hadir. Gunakan Download Website untuk saat ini."
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Publish</span>
+          </button>
+
           {/* Download Website Button */}
           <button
             onClick={handleDownload}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white text-xs font-semibold px-3 sm:px-3.5 py-1.5 rounded-lg transition-all shadow-xs"
-            title="Download kode HTML website siap pakai"
+            title="Download bundle ZIP (HTML siap pakai)"
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Download Website</span>
