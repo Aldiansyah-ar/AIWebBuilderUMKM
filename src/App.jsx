@@ -34,6 +34,15 @@ import { exportWebsiteToZip, copyHtmlToClipboard } from './lib/exportWebsite'
 import { useWebsite } from './store/websiteStore.jsx'
 import { generateWebsite, reviseWebsite } from './lib/websiteController'
 
+function toChatHistory(messages) {
+  return messages
+    .filter((m) => m.sender === 'user' || m.sender === 'assistant')
+    .map((m) => ({
+      role: m.sender === 'assistant' ? 'assistant' : 'user',
+      content: m.text,
+    }))
+}
+
 // Contoh deskripsi bisnis untuk demo evaluator (TSK-06B / US-10)
 const EXAMPLE_BUSINESS_PROMPTS = [
   {
@@ -270,11 +279,12 @@ export default function App() {
       // back to deterministic template detection so the demo never stalls
       // when no GEMINI_API_KEY is configured (see server/index.js).
       const detected = determineTemplate(text)
+      const history = toChatHistory(messages)
       const isNewBusinessDescription = detected !== activeTemplate
 
       const result = isNewBusinessDescription
         ? await generateWebsite(text)
-        : await reviseWebsite(websiteData, text)
+        : await reviseWebsite(websiteData, text, history)
 
       if (result.ok) {
         if (isNewBusinessDescription) handleSelectTemplate(detected)
@@ -288,12 +298,29 @@ export default function App() {
         if (result.error && result.error !== 'not_configured') {
           showToast('info', 'AI tidak merespons, menggunakan mode offline.')
         }
-        if (isNewBusinessDescription) {
-          handleSelectTemplate(detected)
-          responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detected].name}. Semua komponen diperbarui!`
+        const backendFallback = result.fallback
+
+        if (backendFallback) {
+          const fallbackTemplateId =
+            backendFallback.templateId && TEMPLATE_META[backendFallback.templateId]
+            ? backendFallback.templateId
+            : detected
+
+          if (fallbackTemplateId !== activeTemplate) {
+            handleSelectTemplate(fallbackTemplateId)
+          }
+    
+          patchWebsite(backendFallback)
+          if (backendFallback.templateId) {
+            setActiveTemplate(backendFallback.templateId)
+          }
+          responseText = `AI sedang offline — kategori "${TEMPLATE_META[fallbackTemplateId].name}" tetap terdeteksi via fallback backend. Semua komponen diperbarui!`
+        } else if (isNewBusinessDescription) {
+            handleSelectTemplate(detected)
+            responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detected].name}. Semua komponen diperbarui!`
         } else {
-          patchWebsite({ meta: { ...websiteData.meta, tagline: text.slice(0, 45) } })
-          responseText = `Permintaan revisi "${text}" telah diterapkan pada konten website secara real-time!`
+            patchWebsite({ meta: { ...websiteData.meta, tagline: text.slice(0, 45) } })
+            responseText = `Permintaan revisi "${text}" telah diterapkan pada konten website secara real-time!`
         }
       }
     }

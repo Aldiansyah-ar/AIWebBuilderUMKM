@@ -17,9 +17,29 @@ async function postJson(url, body) {
       body: JSON.stringify(body),
       signal: controller.signal,
     })
-    return await res.json()
-  } catch (err) {
-    return { ok: false, error: 'network', detail: err?.message || String(err) }
+
+    let json
+    try {
+      json = await res.json()
+    } catch (err) {
+      return { ok: false, error: 'network', detail: err?.message || String(err), fallback: null, }
+    }
+  
+    if (json && typeof json === 'object') {
+      if (json.ok === true) {
+        return { ok: true, data: json.data ?? null }
+      }
+      return {ok: false, error: json.error ?? 'unknown', detail: json.detail, fallback: json.fallback ?? null, }
+    }
+    return {ok: false, error: 'invalid_response', detail: 'Response was not a JSON object', fallback: null, }
+  } catch(err) {
+    const isAbort = err?.name === 'AbortError'
+    return {
+      ok: false,
+      error: isAbort ? 'timeout' : 'network',
+      detail: err?.message || String(err),
+      fallback: null,
+    }
   } finally {
     clearTimeout(timer)
   }
@@ -32,7 +52,7 @@ export async function generateWebsite(input) {
 }
 
 /** Request a chat-based revision against the current website state (US-07/US-08). */
-export async function reviseWebsite(current, message) {
-  const json = await postJson('/api/revise', { current, message })
+export async function reviseWebsite(current, message, history=[]) {
+  const json = await postJson('/api/revise', { current, message, history })
   return json
 }
