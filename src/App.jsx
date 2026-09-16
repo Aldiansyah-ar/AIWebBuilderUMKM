@@ -78,39 +78,25 @@ export default function App() {
   // doesn't silently snap the preview back to F&B while the persisted
   // content is for a different template (TSK-03B).
   useEffect(() => {
-    if (!websiteData) {
-      const seed = JSON.parse(JSON.stringify(mockDataByTemplate[TEMPLATE_FNB]))
-      seed.templateId = TEMPLATE_FNB
-      setWebsiteData(seed, { snapshot: false })
-    } else if (websiteData.templateId && TEMPLATE_META[websiteData.templateId] && websiteData.templateId !== activeTemplate) {
+    // Only sync the template selector to a persisted session (reload case).
+    // A genuinely empty session stays null — no mock seed — so the workspace
+    // shows a real blank state until the user generates a first draft
+    // (see GitHub issue #3).
+    if (websiteData?.templateId && TEMPLATE_META[websiteData.templateId] && websiteData.templateId !== activeTemplate) {
       setActiveTemplate(websiteData.templateId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Chat conversation state matching reference design
+  // Chat conversation state: only the real onboarding message. No fabricated
+  // user/assistant turns — a first-time user should never see a conversation
+  // they never had (see GitHub issue #3).
   const [messages, setMessages] = useState([
     {
       id: 'msg-1',
       sender: 'assistant',
       type: 'onboarding',
-      text: 'Halo! 👋 Saya siap membantu membuat website untuk bisnis Anda.',
-      steps: [
-        { label: 'Informasi bisnis dipahami', status: 'done' },
-        { label: 'Template F&B dipilih', status: 'done' },
-        { label: 'Menyusun konten & layout', status: 'in-progress' },
-        { label: 'Menyiapkan preview', status: 'pending' },
-      ],
-    },
-    {
-      id: 'msg-2',
-      sender: 'user',
-      text: 'Ubah warna utama jadi cokelat tua klasik.',
-    },
-    {
-      id: 'msg-3',
-      sender: 'assistant',
-      text: 'Tentu! Warna website telah diperbarui ke tema Modern Warm. Konten tetap aman.',
+      text: 'Halo! 👋 Ceritakan bisnis Anda (nama usaha, kategori, produk/layanan unggulan, target pasar, dan nomor WhatsApp) dan saya akan buatkan draft website pertama.',
     },
   ])
 
@@ -204,16 +190,20 @@ export default function App() {
     let responseText = ''
 
     // Fast, deterministic local actions (1-4) never touch the network —
-    // no reason to spend a Gemini call on a plain palette swap.
+    // no reason to spend a Gemini call on a plain palette swap. These are
+    // revisions, so they only make sense once a first draft exists —
+    // guard on websiteData to avoid touching a null website (issue #3).
     const isDeterministicAction =
-      lower.includes('cokelat') || lower.includes('klasik') || lower.includes('modern warm') ||
-      lower.includes('amber') || lower.includes('hangat') || lower.includes('warm amber') ||
-      lower.includes('hijau') || lower.includes('sage') || lower.includes('toska') ||
-      lower.includes('biru') || lower.includes('corporate') || lower.includes('navy') ||
-      lower.includes('ungu') || lower.includes('violet') || lower.includes('retail') ||
-      lower.includes('headline') || lower.includes('judul') || lower.includes('slogan') ||
-      lower.includes('menu') || lower.includes('tambah') || lower.includes('produk') ||
-      lower.includes('whatsapp') || lower.includes('nomor') || lower.includes('ganti wa') || lower.includes('update wa')
+      Boolean(websiteData) && (
+        lower.includes('cokelat') || lower.includes('klasik') || lower.includes('modern warm') ||
+        lower.includes('amber') || lower.includes('hangat') || lower.includes('warm amber') ||
+        lower.includes('hijau') || lower.includes('sage') || lower.includes('toska') ||
+        lower.includes('biru') || lower.includes('corporate') || lower.includes('navy') ||
+        lower.includes('ungu') || lower.includes('violet') || lower.includes('retail') ||
+        lower.includes('headline') || lower.includes('judul') || lower.includes('slogan') ||
+        lower.includes('menu') || lower.includes('tambah') || lower.includes('produk') ||
+        lower.includes('whatsapp') || lower.includes('nomor') || lower.includes('ganti wa') || lower.includes('update wa')
+      )
 
     if (isDeterministicAction) {
       await wait(450)
@@ -280,7 +270,9 @@ export default function App() {
       // when no GEMINI_API_KEY is configured (see server/index.js).
       const detected = determineTemplate(text)
       const history = toChatHistory(messages)
-      const isNewBusinessDescription = detected !== activeTemplate
+      // No website yet at all → this message must be the first draft
+      // request, never a revision (there's nothing to revise) — see #3.
+      const isNewBusinessDescription = !websiteData || detected !== activeTemplate
 
       const result = isNewBusinessDescription
         ? await generateWebsite(text)
@@ -385,8 +377,8 @@ export default function App() {
               AKTIF :
             </span>
             <span className="flex items-center gap-1.5 font-bold text-white uppercase tracking-wide">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              {websiteData?.meta?.businessName || 'WARUNG KOPI SEJAHTERA'}
+              <span className={`w-2 h-2 rounded-full ${websiteData ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+              {websiteData?.meta?.businessName || 'BELUM ADA DRAFT'}
             </span>
           </div>
 
@@ -449,7 +441,7 @@ export default function App() {
                 AI STUDIO V1.0
               </span>
               <span className="font-medium text-slate-500 truncate max-w-[140px]">
-                {websiteData?.meta?.businessName || 'Warung Kopi Sejahtera'}
+                {websiteData?.meta?.businessName || 'Belum ada draft'}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -556,38 +548,41 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Options (Pilihan Cepat) */}
-          <div className="p-2.5 bg-white border-t border-slate-100 shrink-0">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
-              Pilihan Cepat:
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => handleSendPrompt('Ubah warna utama jadi cokelat tua klasik.')}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100 transition-colors"
-              >
-                ☕ Cokelat Klasik
-              </button>
-              <button
-                onClick={() => handleSendPrompt('Ganti headline jadi lebih menarik.')}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                ✏️ Headline Baru
-              </button>
-              <button
-                onClick={() => handleSendPrompt('Tambahkan menu baru: Pisang Goreng Keju')}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                ➕ Menu Baru
-              </button>
-              <button
-                onClick={() => handleSendPrompt('Ganti warna jadi warm amber')}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
-              >
-                🍯 Warm Amber
-              </button>
+          {/* Quick Options (Pilihan Cepat) — revision shortcuts only make
+              sense once a first draft exists (see GitHub issue #3). */}
+          {websiteData && (
+            <div className="p-2.5 bg-white border-t border-slate-100 shrink-0">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+                Pilihan Cepat:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => handleSendPrompt('Ubah warna utama jadi cokelat tua klasik.')}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100 transition-colors"
+                >
+                  ☕ Cokelat Klasik
+                </button>
+                <button
+                  onClick={() => handleSendPrompt('Ganti headline jadi lebih menarik.')}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                >
+                  ✏️ Headline Baru
+                </button>
+                <button
+                  onClick={() => handleSendPrompt('Tambahkan menu baru: Pisang Goreng Keju')}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                >
+                  ➕ Menu Baru
+                </button>
+                <button
+                  onClick={() => handleSendPrompt('Ganti warna jadi warm amber')}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
+                >
+                  🍯 Warm Amber
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Input Area */}
           <div className="p-3 bg-white border-t border-slate-100 shrink-0">
