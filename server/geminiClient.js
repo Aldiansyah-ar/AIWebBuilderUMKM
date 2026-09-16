@@ -4,7 +4,7 @@
  */
 import { validateWebsite } from '../shared/schema.js'
 
-const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_MODEL = 'gemini-3.6-flash'
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const REQUEST_TIMEOUT_MS = 15000
 const MAX_ATTEMPTS = 2 // 1 initial call + 1 retry, per TSK-02B
