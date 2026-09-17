@@ -26,7 +26,7 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload))
 }
 
-function normalizeHistory(raw) {
+export function normalizeHistory(raw) {
   if (!Array.isArray(raw)) return []
   const cleaned = raw
     .filter((t) => t && typeof t === 'object')
