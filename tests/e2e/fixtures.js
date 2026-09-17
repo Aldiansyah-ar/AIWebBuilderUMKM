@@ -48,6 +48,39 @@ export async function mockGenerateFailure(page) {
   )
 }
 
+/** A retail-category fallback payload (§5 schema, matches shared/schema.js's
+ * own FALLBACKS.retail) — used to prove issue #15's backend-fallback path
+ * really applies `result.fallback`'s own data/templateId, not App.jsx's
+ * local/deterministic guess. */
+export const RETAIL_FALLBACK_DRAFT = {
+  templateId: 'template-retail',
+  theme: { primaryColor: '#065f46', accentColor: '#34d399', fontFamily: 'display' },
+  meta: { businessName: 'Toko Berkah Retail', category: 'Retail', tagline: 'Produk fisik lengkap harga bersahabat' },
+  hero: {
+    title: 'Belanja Mudah di Toko Berkah',
+    subtitle: 'Sedia sembako, snack, dan kebutuhan harian',
+    ctaText: 'Chat WhatsApp',
+    ctaWhatsappMessage: 'Halo, mau tanya stok',
+  },
+  about: { story: 'Toko retail keluarga melayani kebutuhan harian warga dengan harga jujur.', highlights: ['Buka setiap hari', 'Bisa antar'] },
+  services: [
+    { name: 'Paket Sembako', description: 'Beras, minyak, gula', priceEstimate: '85rb' },
+    { name: 'Snack Box', description: 'Aneka camilan', priceEstimate: '25rb' },
+    { name: 'Minuman Dingin', description: 'Teh, kopi, jus', priceEstimate: '8rb' },
+  ],
+  testimonials: [{ customerName: 'Ibu Ani', review: 'Lengkap dan murah' }],
+  contact: { whatsappNumber: '08123456789', address: 'Surabaya', instagram: '@tokoberkah' },
+}
+
+/** Mock POST /api/generate failing but WITH a backend fallback payload
+ * (issue #15) — as opposed to mockGenerateFailure's `fallback: null`, which
+ * only ever exercises App.jsx's local/deterministic fallback branch. */
+export async function mockGenerateFailureWithFallback(page, fallback) {
+  await page.route('**/api/generate', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'llm_failed', fallback }) })
+  )
+}
+
 /**
  * Mock POST /api/revise with a successful LLM response. `onRequest`, if
  * given, is called with the parsed request body so a test can assert on
