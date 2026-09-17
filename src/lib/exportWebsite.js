@@ -4,7 +4,8 @@
  * tombol fallback 'Salin Kode HTML'").
  */
 import JSZip from 'jszip'
-import { generateWhatsappUrl, isValidWhatsappNumber } from './templateSelector'
+import { generateWhatsappUrl, isValidWhatsappNumber, formatWhatsappNumber } from './templateSelector'
+import faviconSvgRaw from '../assets/favicon.svg?raw'
 
 const escapeHtml = (value = '') => String(value)
   .replaceAll('&', '&amp;')
@@ -15,16 +16,31 @@ const escapeHtml = (value = '') => String(value)
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
+// issue #29: inlined as a data URI (not bundled as a separate file) so the
+// favicon works identically in all 3 export modes (ZIP, single-HTML
+// download, clipboard copy) without ever risking a broken relative link
+// (issue #21) in the modes that don't ship a second file.
+const FAVICON_DATA_URI = `data:image/svg+xml,${encodeURIComponent(faviconSvgRaw)}`
+
+// issue #30: JSON.stringify doesn't escape `<`, so a business-supplied
+// string containing `</script>` could otherwise break out of the inline
+// <script> tag it's embedded in — this is the standard safe encoding for
+// JSON-in-HTML.
+const safeJsonForScript = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
+
 /** Render a WhatsApp CTA as a real disabled <button> when the number is
  * invalid (mirrors Hero.jsx/Contact.jsx and issue #10 — no aria-disabled
- * links), or a live wa.me link otherwise. */
-function waCtaHtml({ hasValidWhatsapp, waUrl, classes, label, id, ariaLabel }) {
+ * links), or a live wa.me link otherwise. `trackLabel` (issue #31) tags the
+ * live link for the click-tracking script below — skipped on the disabled
+ * button since it isn't clickable. */
+function waCtaHtml({ hasValidWhatsapp, waUrl, classes, label, id, ariaLabel, trackLabel }) {
   const idAttr = id ? ` id="${id}"` : ''
   if (!hasValidWhatsapp) {
     return `<button type="button" disabled title="Nomor WhatsApp belum valid" aria-label="Nomor WhatsApp belum valid"${idAttr} class="${classes} opacity-50 cursor-not-allowed pointer-events-none">${label}</button>`
   }
   const ariaAttr = ariaLabel ? ` aria-label="${escapeHtml(ariaLabel)}"` : ''
-  return `<a href="${waUrl}" target="_blank" rel="noopener noreferrer"${idAttr}${ariaAttr} class="${classes}">${label}</a>`
+  const trackAttr = trackLabel ? ` data-cta-track="${escapeHtml(trackLabel)}"` : ''
+  return `<a href="${waUrl}" target="_blank" rel="noopener noreferrer"${idAttr}${ariaAttr}${trackAttr} class="${classes}">${label}</a>`
 }
 
 export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
@@ -50,6 +66,27 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
 
   const defaultPrimaryColor = templateId === 'template-fnb' ? '#452821' : templateId === 'template-retail' ? '#6d28d9' : '#1e40af'
   const primaryColor = HEX_COLOR_RE.test(theme.primaryColor || '') ? theme.primaryColor : defaultPrimaryColor
+
+  // issue #29: og:description mirrors the <meta name="description"> logic below.
+  const ogDescription = subtitle || tagline || businessName
+
+  // issue #30: schema.org LocalBusiness JSON-LD, built from the same data
+  // already on the page (no extra input needed from the user).
+  const localBusinessSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'LocalBusiness',
+    name: meta.businessName || 'UMKM Website',
+    description: hero.subtitle || meta.tagline || undefined,
+    ...(contact.address ? { address: { '@type': 'PostalAddress', streetAddress: contact.address } } : {}),
+    ...(hasValidWhatsapp ? { telephone: `+${formatWhatsappNumber(waNumber)}` } : {}),
+  }
+
+  // issue #30: Maps needs no API key for a plain embed URL like this one.
+  const mapsEmbedHtml = contact.address
+    ? `<div class="mt-6 rounded-2xl overflow-hidden border border-white/20 shadow-lg">
+        <iframe src="https://www.google.com/maps?q=${encodeURIComponent(contact.address)}&output=embed" width="100%" height="220" style="border:0" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Lokasi ${businessName}"></iframe>
+      </div>`
+    : ''
 
   const servicesHtml = services
     .map(
@@ -83,6 +120,10 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${businessName} — ${tagline || category || 'Website Resmi'}</title>
   <meta name="description" content="${subtitle || tagline || businessName}">
+  <link rel="icon" type="image/svg+xml" href="${FAVICON_DATA_URI}">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="${businessName} — ${tagline || category || 'Website Resmi'}">
+  <meta property="og:description" content="${ogDescription}">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -90,6 +131,7 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
   <style>
     body { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
   </style>
+  <script type="application/ld+json">${safeJsonForScript(localBusinessSchema)}</script>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased selection:bg-amber-100 selection:text-amber-900">
   <!-- Navbar -->
@@ -108,6 +150,7 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
           waUrl,
           classes: 'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-sm font-bold px-4 py-2 rounded-full shadow-sm',
           label: 'Pesan via WA',
+          trackLabel: 'whatsapp_header',
         })}
       </div>
     </div>
@@ -124,6 +167,7 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
         waUrl,
         classes: 'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white font-bold px-8 py-4 rounded-full text-lg shadow-lg hover:shadow-xl transition-all',
         label: ctaText,
+        trackLabel: 'whatsapp_hero',
       })}
     </div>
   </section>
@@ -167,11 +211,13 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
         waUrl,
         classes: 'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white font-bold px-8 py-4 rounded-full text-lg shadow-lg',
         label: ctaText,
+        trackLabel: 'whatsapp_contact',
       })}
       <div class="pt-8 text-sm text-white/70 space-y-1">
         ${contact.address ? `<p>📍 ${escapeHtml(contact.address)}</p>` : ''}
         ${contact.instagram ? `<p>📸 ${escapeHtml(contact.instagram)}</p>` : ''}
       </div>
+      ${mapsEmbedHtml}
     </div>
   </section>
 
@@ -188,6 +234,7 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
     waUrl,
     id: 'sticky-wa-cta',
     ariaLabel: 'Hubungi kami via WhatsApp',
+    trackLabel: 'whatsapp_sticky',
     classes: 'md:hidden fixed bottom-5 right-5 z-50 hidden items-center justify-center w-14 h-14 rounded-full bg-[#25d366] text-white shadow-xl hover:bg-[#128c4a] active:scale-95 transition-all',
     label: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6" aria-hidden="true">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
@@ -205,6 +252,20 @@ export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
         cta.classList.toggle('flex', pastHero);
       }, { threshold: 0 });
       observer.observe(hero);
+    })();
+  </script>
+
+  <!-- CTA click tracking (issue #31): fires only if the user has plugged in
+       their own GA4/Meta Pixel snippet (see README.txt) — a no-op otherwise. -->
+  <script>
+    (function () {
+      document.querySelectorAll('[data-cta-track]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var label = el.getAttribute('data-cta-track');
+          if (typeof window.gtag === 'function') window.gtag('event', 'cta_click', { event_label: label });
+          if (typeof window.fbq === 'function') window.fbq('trackCustom', 'CtaClick', { label: label });
+        });
+      });
     })();
   </script>
 </body>
@@ -242,7 +303,41 @@ export async function exportWebsiteToZip(data = {}, templateId = 'template-fnb')
   zip.file('index.html', html)
   zip.file(
     'README.txt',
-    `Website ${data?.meta?.businessName || 'UMKM'}\n\nCara pakai:\n1. Ekstrak file ini.\n2. Buka index.html di browser, atau upload ke hosting statis mana pun.\n3. Tailwind CSS dimuat via CDN — tidak perlu build step tambahan.\n\nDibuat dengan AI UMKM Website Builder.`
+    `Website ${data?.meta?.businessName || 'UMKM'}\n\n` +
+    `Cara pakai:\n` +
+    `1. Ekstrak file ini.\n` +
+    `2. Buka index.html di browser, atau upload ke hosting statis mana pun.\n` +
+    `3. Tailwind CSS dimuat via CDN — tidak perlu build step tambahan.\n` +
+    // issue #23
+    `4. Pastikan hosting Anda mengaktifkan HTTPS (kebanyakan hosting gratis seperti Netlify/Vercel/GitHub Pages sudah otomatis aktif) — browser modern menandai situs tanpa HTTPS sebagai "Tidak Aman".\n\n` +
+    // issue #30
+    `SEO (opsional):\n` +
+    `sitemap.xml dan robots.txt sudah disertakan, tapi masih pakai URL placeholder ` +
+    `"https://ganti-dengan-domain-anda.com" — ganti dengan domain asli Anda setelah website live, ` +
+    `lalu submit sitemap.xml ke Google Search Console.\n\n` +
+    // issue #31
+    `Melacak klik tombol WhatsApp (opsional):\n` +
+    `Tombol WA/CTA di index.html sudah otomatis mengirim event "cta_click" begitu Anda memasang ` +
+    `Google Analytics (GA4) atau Meta Pixel — cukup tempel snippet gtag.js/Meta Pixel Anda sebelum tag </head> ` +
+    `di index.html, tidak perlu ubah apa pun yang lain.\n\n` +
+    `Dibuat dengan AI UMKM Website Builder.`
+  )
+  // issue #30: placeholder domain the user edits after they know their real
+  // one — export time has no way to know it.
+  zip.file(
+    'robots.txt',
+    `User-agent: *\nAllow: /\n\nSitemap: https://ganti-dengan-domain-anda.com/sitemap.xml\n`
+  )
+  zip.file(
+    'sitemap.xml',
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    `  <url>\n` +
+    `    <loc>https://ganti-dengan-domain-anda.com/</loc>\n` +
+    `    <changefreq>monthly</changefreq>\n` +
+    `    <priority>1.0</priority>\n` +
+    `  </url>\n` +
+    `</urlset>\n`
   )
   const blob = await zip.generateAsync({ type: 'blob' })
   downloadBlob(blob, `${slug}-website.zip`)

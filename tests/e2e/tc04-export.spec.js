@@ -41,3 +41,39 @@ test('TC-04: downloaded export is a standalone bundle with a working wa.me link'
   // "standalone" (FR-06): usable offline, no dependency on the dev server.
   expect(html).not.toMatch(/localhost:\d+/)
 })
+
+test('ZIP export bundles sitemap.xml, robots.txt, and a README with HTTPS/SEO/tracking notes (issues #23, #30, #31)', async ({ page }) => {
+  await mockGenerateSuccess(page, WARUNG_KOPI_DRAFT)
+  await page.goto('/')
+  await page.getByPlaceholder('Minta perubahan pada website...').fill(
+    'Warung Kopi Sejahtera, jual kopi tubruk dan roti bakar di Surabaya, target anak muda nugas, wa 08123456789'
+  )
+  await page.getByTitle('Kirim revisi').click()
+  await expect(previewFrame(page).locator('#services h3').first()).toBeVisible({ timeout: 10000 })
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download Website' }).click(),
+  ])
+
+  const path = await download.path()
+  const buffer = await fs.readFile(path)
+  expect(download.suggestedFilename()).toMatch(/\.zip$/)
+  const zip = await JSZip.loadAsync(buffer)
+
+  // issue #23: explicit HTTPS instruction.
+  const readme = await zip.file('README.txt').async('string')
+  expect(readme).toMatch(/HTTPS/)
+
+  // issue #31: tells the user how to plug in analytics for the CTA tracking
+  // already wired into index.html (see the cta_click test below).
+  expect(readme).toMatch(/Google Analytics|Meta Pixel/)
+
+  // issue #30: sitemap.xml/robots.txt present, README explains the
+  // placeholder domain needs replacing.
+  expect(readme).toContain('sitemap.xml')
+  const robots = await zip.file('robots.txt').async('string')
+  expect(robots).toContain('Sitemap:')
+  const sitemap = await zip.file('sitemap.xml').async('string')
+  expect(sitemap).toContain('<urlset')
+})
