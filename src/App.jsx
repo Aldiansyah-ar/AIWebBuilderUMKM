@@ -17,6 +17,9 @@ import {
   Send,
   CheckCircle2,
   Circle,
+  XCircle,
+  AlertTriangle,
+  Undo2,
   UploadCloud,
 } from 'lucide-react'
 
@@ -43,6 +46,34 @@ function toChatHistory(messages) {
       role: m.sender === 'assistant' ? 'assistant' : 'user',
       content: m.text,
     }))
+}
+
+// Change summary (#47) — a plain top-level-key diff, not a deep patch log:
+// good enough to tell the user *what changed* without a diff library, since
+// patchWebsite always replaces a whole section rather than merging keys.
+const CHANGE_LABELS = {
+  theme: 'Tema warna',
+  hero: 'Headline / hero',
+  about: 'Deskripsi / tentang kami',
+  contact: 'Kontak',
+  meta: 'Info bisnis',
+  templateId: 'Template',
+}
+function summarizeChanges(prev, delta) {
+  if (!delta) return []
+  const changes = []
+  for (const [key, label] of Object.entries(CHANGE_LABELS)) {
+    if (key in delta && JSON.stringify(delta[key]) !== JSON.stringify(prev?.[key])) {
+      changes.push(label)
+    }
+  }
+  if (delta.services) {
+    const prevLen = prev?.services?.length || 0
+    const nextLen = delta.services.length
+    if (nextLen > prevLen) changes.push(`Menu ditambahkan (+${nextLen - prevLen})`)
+    else if (JSON.stringify(delta.services) !== JSON.stringify(prev?.services)) changes.push('Menu diperbarui')
+  }
+  return changes
 }
 
 // Contoh deskripsi bisnis untuk demo evaluator (TSK-06B / US-10)
@@ -75,7 +106,13 @@ export default function App() {
 
   // Website data now lives in the backend state manager (TSK-03B), which
   // persists it to sessionStorage so a reload doesn't lose AI-driven edits.
-  const { website: websiteData, setWebsite: setWebsiteData, patchWebsite, appendServiceItem } = useWebsite()
+  const { website: websiteData, setWebsite: setWebsiteData, patchWebsite, appendServiceItem, history, undo, saveStatus } = useWebsite()
+  const canUndo = history.length > 0
+  // Tracks which assistant message currently owns the visible "Undo" action
+  // (#48) — only the most recent change gets one, so undo semantics stay
+  // predictable (undo always reverts the single latest change, never a
+  // stale earlier one a user might click on further up the conversation).
+  const [lastChangeMsgId, setLastChangeMsgId] = useState(null)
 
   // First mount: seed the F&B demo dataset if no session was persisted: else
   // (a reload with sessionStorage data, or an AI-generated templateId) sync
@@ -213,12 +250,27 @@ export default function App() {
       status: idx <= doneUpTo ? 'done' : idx === activeIdx ? 'in-progress' : 'pending',
     }))
 
+  // Final step state once a flow settles (#45) — a genuine failure (no
+  // fallback applied, content untouched) marks the last step as failed
+  // instead of a green checkmark, so the checklist stops contradicting the
+  // "gagal" text in the same bubble.
+  const finalSteps = (flowState) =>
+    ONBOARDING_STEP_LABELS.map((label, idx) => {
+      const isLast = idx === ONBOARDING_STEP_LABELS.length - 1
+      if (isLast && flowState === 'error') return { label, status: 'error' }
+      return { label, status: 'done' }
+    })
+
   // Shared AI call for both a first draft and a (confirmed) revision —
   // drives the same progress bubble through all 4 phases and applies the
   // result. Used by the general chat path and by the category-switch
   // confirmation flow (#14).
   const runAiFlow = async (text, { isNewBusinessDescription, detectedTemplateId }) => {
     const progressId = `bot-${Date.now()}`
+    // Snapshot taken before any mutation below, so the change summary (#47)
+    // diffs against what was on screen right before this request — not
+    // against whatever websiteData has become by the time the diff runs.
+    const prevSnapshotForDiff = websiteData
     setMessages((prev) => [
       ...prev,
       { id: progressId, sender: 'assistant', text: 'Sedang memproses permintaan Anda...', steps: stepsAt(0, -1) },
@@ -247,11 +299,21 @@ export default function App() {
     setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(3, 2) } : m)))
 
     let responseText = ''
+    // Explicit generating/success/error/offline state (#45) — drives both the
+    // status badge on the bubble and which icon the final step gets, instead
+    // of every outcome ending in the same all-green checklist regardless of
+    // whether anything actually succeeded.
+    let flowState = 'error'
+    let changes = []
 
     if (result.ok) {
       if (isNewBusinessDescription) handleSelectTemplate(detectedTemplateId)
       patchWebsite(result.data)
       if (result.data.templateId) setActiveTemplate(result.data.templateId)
+      flowState = 'success'
+      changes = isNewBusinessDescription
+        ? ['Draft pertama dibuat']
+        : summarizeChanges(prevSnapshotForDiff, result.data)
       responseText = isNewBusinessDescription
         ? `Draft website baru berhasil dibuat oleh AI untuk kategori ${TEMPLATE_META[detectedTemplateId].name}!`
         : `Permintaan revisi "${text}" berhasil diterapkan oleh AI!`
@@ -262,9 +324,12 @@ export default function App() {
         responseText += ' Catatan: nomor WhatsApp yang terdeteksi sepertinya belum lengkap/valid — perbaiki di panel kontak supaya tombol pemesanan aktif.'
       }
     } else {
-      // Offline/failure fallback — same UX as before the backend integration.
+      // Offline/failure fallback — same UX as before the backend integration,
+      // but the toast is now 'warning' (not 'info', which rendered as a green
+      // success toast — issue #46) since this is AI failing over to a
+      // degraded mode, not something that went right.
       if (result.error && result.error !== 'not_configured') {
-        showToast('info', 'AI tidak merespons, menggunakan mode offline.')
+        showToast('warning', 'AI tidak merespons, menggunakan mode offline.')
       }
       const backendFallback = result.fallback
 
@@ -282,9 +347,18 @@ export default function App() {
         if (backendFallback.templateId) {
           setActiveTemplate(backendFallback.templateId)
         }
+        flowState = 'offline'
+        // A first draft has nothing real to diff against — prevSnapshotForDiff
+        // is null, which would make summarizeChanges list nearly every field
+        // as "changed". Only diff for an actual revision on an existing draft.
+        changes = isNewBusinessDescription
+          ? ['Draft awal dibuat via fallback backend']
+          : summarizeChanges(prevSnapshotForDiff, backendFallback)
         responseText = `AI sedang offline — kategori "${TEMPLATE_META[fallbackTemplateId].name}" tetap terdeteksi via fallback backend. Semua komponen diperbarui!`
       } else if (isNewBusinessDescription) {
         handleSelectTemplate(detectedTemplateId)
+        flowState = 'offline'
+        changes = ['Draft awal dibuat via fallback deterministik']
         responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detectedTemplateId].name}. Semua komponen diperbarui!`
       } else {
         // No backend fallback exists for a failed /api/revise (unlike
@@ -295,14 +369,27 @@ export default function App() {
         // live site the moment any revision genuinely failed (rate limit,
         // Gemini quota, network blip) — say so honestly instead, and leave
         // the existing content untouched.
+        flowState = 'error'
         responseText = `Maaf, permintaan "${text}" belum bisa diproses AI saat ini. Coba lagi sebentar lagi, atau pakai salah satu Pilihan Cepat di bawah untuk perubahan warna/menu/headline.`
       }
     }
 
     await wait(120)
     setMessages((prev) =>
-      prev.map((m) => (m.id === progressId ? { ...m, text: responseText, steps: stepsAt(3, 3) } : m))
+      prev.map((m) =>
+        m.id === progressId
+          ? { ...m, text: responseText, steps: finalSteps(flowState), flowState, changes }
+          : m
+      )
     )
+    // Only arm Undo for an actual revision on an existing draft. A bare
+    // error (flowState === 'error') has nothing to undo, and the very first
+    // draft is excluded too: handleSelectTemplate seeds a mock-template
+    // placeholder into state before the real AI/fallback data lands, which
+    // setWebsite's snapshot logic captures into history as if it were a
+    // real prior draft — undoing right after a first generate would revert
+    // to that internal placeholder instead of to "no draft".
+    if (changes.length > 0 && !isNewBusinessDescription) setLastChangeMsgId(progressId)
     setIsTyping(false)
   }
 
@@ -358,6 +445,10 @@ export default function App() {
 
     const lower = text.toLowerCase()
     let responseText = ''
+    // Which change summary label (#47) a deterministic quick action applied —
+    // these branches already know exactly what changed, so there's no need
+    // to diff before/after state the way the AI path does.
+    let changeLabel = null
 
     // Fast, deterministic local actions (1-4) never touch the network —
     // no reason to spend a Gemini call on a plain palette swap. These are
@@ -386,21 +477,26 @@ export default function App() {
       if (lower.includes('cokelat') || lower.includes('klasik') || lower.includes('modern warm')) {
         handleThemeChange('modern-warm')
         responseText = 'Tentu! Warna website telah diperbarui ke tema Modern Warm (Cokelat). Konten tetap aman.'
+        changeLabel = 'Tema warna'
       } else if (lower.includes('amber') || lower.includes('hangat') || lower.includes('warm amber')) {
         handleThemeChange('warm-amber')
         responseText = 'Warna website diperbarui ke tema Warm Amber dengan sentuhan kehangatan madu.'
+        changeLabel = 'Tema warna'
       } else if (lower.includes('hijau') || lower.includes('sage') || lower.includes('toska')) {
         handleThemeChange('forest-sage')
         responseText = 'Warna website diperbarui ke tema Forest Sage yang segar dan natural.'
+        changeLabel = 'Tema warna'
       } else if (lower.includes('biru') || lower.includes('corporate') || lower.includes('navy')) {
         // Scoped to the active template instead of force-switching to
         // Services — switching used to silently wipe whatever draft the
         // user already had (issue #4).
         handleThemeChangeForActiveTemplate('corporate-blue')
         responseText = 'Warna website diperbarui ke tema Corporate Blue profesional. Konten Anda tetap aman.'
+        changeLabel = 'Tema warna'
       } else if (lower.includes('ungu') || lower.includes('violet') || lower.includes('retail')) {
         handleThemeChangeForActiveTemplate('bold-violet')
         responseText = 'Warna website diperbarui ke tema Bold Violet. Konten Anda tetap aman.'
+        changeLabel = 'Tema warna'
       }
       // 2. Check headline revision — content is tailored per active template
       // instead of a hardcoded F&B headline (issue #6).
@@ -422,6 +518,7 @@ export default function App() {
         const newHeadline = headlineByTemplate[activeTemplate] || headlineByTemplate[TEMPLATE_FNB]
         patchWebsite({ hero: { ...websiteData.hero, title: newHeadline.title, subtitle: newHeadline.subtitle } })
         responseText = `Headline berhasil diperbarui menjadi "${newHeadline.title}". Susunan kalimat dioptimalkan untuk daya tarik maksimal!`
+        changeLabel = 'Headline / hero'
       }
       // 3. Check menu/product addition — dedicated append action (TSK-05B),
       // not a full replace, tailored per active template (issue #6).
@@ -449,6 +546,7 @@ export default function App() {
         const newItem = newItemByTemplate[activeTemplate] || newItemByTemplate[TEMPLATE_FNB]
         appendServiceItem(newItem)
         responseText = `Item baru "${newItem.name}" (${newItem.priceEstimate}) berhasil ditambahkan ke katalog!`
+        changeLabel = 'Menu ditambahkan (+1)'
       }
       // 4. Check WhatsApp update
       // NOTE: bare "wa" is deliberately excluded — it false-matches substrings like
@@ -463,6 +561,7 @@ export default function App() {
         const newWa = '6281299887766'
         patchWebsite({ contact: { ...websiteData.contact, whatsappNumber: newWa } })
         responseText = `Nomor WhatsApp CTA berhasil dihubungkan ke +${newWa}. Semua tombol pemesanan siap digunakan!`
+        changeLabel = 'Kontak'
       }
     } else {
       // General path (US-05/US-07): try the real backend/LLM route first
@@ -508,16 +607,32 @@ export default function App() {
       return
     }
 
+    const botMsgId = `bot-${Date.now()}`
     setMessages((prev) => [
       ...prev,
       {
-        id: `bot-${Date.now()}`,
+        id: botMsgId,
         sender: 'assistant',
         text: responseText,
         source: isDeterministicAction ? 'deterministic' : 'llm',
+        flowState: isDeterministicAction ? 'success' : undefined,
+        changes: changeLabel ? [changeLabel] : undefined,
       },
     ])
+    if (changeLabel) setLastChangeMsgId(botMsgId)
     setIsTyping(false)
+  }
+
+  // Revert the most recent AI/quick-action change (#48). MVP scope is a
+  // single visible Undo slot: once used, the button disappears even if more
+  // history remains underneath — re-arms on the next change.
+  const handleUndo = () => {
+    undo()
+    setLastChangeMsgId(null)
+    setMessages((prev) => [
+      ...prev,
+      { id: `sys-undo-${Date.now()}`, sender: 'assistant', text: '↶ Perubahan terakhir dibatalkan.' },
+    ])
   }
 
   // Handle Export / Download Website as a .zip bundle (TSK-06A), with a
@@ -530,7 +645,7 @@ export default function App() {
       console.error('Gagal export ZIP, mencoba fallback clipboard:', err)
       try {
         await copyHtmlToClipboard(websiteData, activeTemplate)
-        showToast('info', 'Gagal membuat ZIP — kode HTML disalin ke clipboard sebagai gantinya.')
+        showToast('warning', 'Gagal membuat ZIP — kode HTML disalin ke clipboard sebagai gantinya.')
       } catch (clipboardErr) {
         console.error('Fallback clipboard juga gagal:', clipboardErr)
         showToast('error', 'Gagal mengunduh website. Silakan coba lagi.')
@@ -659,9 +774,26 @@ export default function App() {
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
                 <span>Asisten Website</span>
               </h2>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Aktif
+              {/* Save-state indicator (#49) — replaces the old "Aktif" badge,
+                  which only ever said the project was open, not whether the
+                  user's changes were actually safe. */}
+              <span
+                className={[
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border',
+                  saveStatus === 'saved'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : saveStatus === 'error'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-slate-100 text-slate-500 border-slate-200',
+                ].join(' ')}
+              >
+                <span
+                  className={[
+                    'w-1.5 h-1.5 rounded-full',
+                    saveStatus === 'saved' ? 'bg-emerald-500' : saveStatus === 'error' ? 'bg-rose-500' : 'bg-slate-400',
+                  ].join(' ')}
+                />
+                {saveStatus === 'saved' ? 'Tersimpan' : saveStatus === 'error' ? 'Gagal menyimpan' : 'Belum ada draft'}
               </span>
             </div>
           </div>
@@ -699,6 +831,8 @@ export default function App() {
                             >
                               {step.status === 'done' ? (
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              ) : step.status === 'error' ? (
+                                <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                               ) : step.status === 'in-progress' ? (
                                 <span className="w-3.5 h-3.5 flex items-center justify-center">
                                   <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
@@ -710,6 +844,8 @@ export default function App() {
                                 className={
                                   step.status === 'done'
                                     ? 'text-slate-800 font-medium'
+                                    : step.status === 'error'
+                                    ? 'text-rose-600 font-semibold'
                                     : step.status === 'in-progress'
                                     ? 'text-blue-600 font-semibold'
                                     : 'text-slate-400'
@@ -721,6 +857,64 @@ export default function App() {
                           ))}
                         </div>
                       </div>
+                    )}
+
+                    {/* Explicit success/offline/error status badge (#45) —
+                        no more bubbles where the text says "gagal" while the
+                        steps checklist shows all-green, or a green success
+                        toast for a fallback that only exists because AI
+                        failed. */}
+                    {msg.flowState && (
+                      <div
+                        className={[
+                          'flex items-center gap-1.5 text-[11px] font-semibold pt-2 border-t border-slate-100',
+                          msg.flowState === 'success'
+                            ? 'text-emerald-600'
+                            : msg.flowState === 'offline'
+                            ? 'text-amber-600'
+                            : 'text-rose-600',
+                        ].join(' ')}
+                      >
+                        {msg.flowState === 'success' && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+                        {msg.flowState === 'offline' && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
+                        {msg.flowState === 'error' && <XCircle className="w-3.5 h-3.5 shrink-0" />}
+                        <span>
+                          {msg.flowState === 'success'
+                            ? 'Berhasil diterapkan'
+                            : msg.flowState === 'offline'
+                            ? 'Mode offline — pakai fallback backend'
+                            : 'Belum bisa diproses'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Change summary (#47) — what specifically the AI/quick
+                        action just touched, so the user isn't left comparing
+                        the preview before/after by eye. */}
+                    {msg.changes?.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100 space-y-1">
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {msg.changes.length} perubahan diterapkan:
+                        </p>
+                        <ul className="text-xs text-slate-600 list-disc list-inside space-y-0.5">
+                          {msg.changes.map((c) => (
+                            <li key={c}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Undo (#48) — only on the message that owns the most
+                        recent change, and only while there's still a
+                        snapshot in history to revert to. */}
+                    {msg.id === lastChangeMsgId && canUndo && (
+                      <button
+                        onClick={handleUndo}
+                        className="flex items-center gap-1 pt-2 border-t border-slate-100 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                      >
+                        <Undo2 className="w-3.5 h-3.5" />
+                        Undo
+                      </button>
                     )}
 
                     {/* Category-switch confirmation (#14): asks before a
