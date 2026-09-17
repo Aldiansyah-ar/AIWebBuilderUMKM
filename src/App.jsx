@@ -287,8 +287,15 @@ export default function App() {
         handleSelectTemplate(detectedTemplateId)
         responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detectedTemplateId].name}. Semua komponen diperbarui!`
       } else {
-        patchWebsite({ meta: { ...websiteData.meta, tagline: text.slice(0, 45) } })
-        responseText = `Permintaan revisi "${text}" telah diterapkan pada konten website secara real-time!`
+        // No backend fallback exists for a failed /api/revise (unlike
+        // /api/generate's getFallback) — there's no safe deterministic way
+        // to guess what an arbitrary free-text revision meant. Previously
+        // this dumped the raw message straight into meta.tagline as a fake
+        // "something changed" signal, which looked like real content on a
+        // live site the moment any revision genuinely failed (rate limit,
+        // Gemini quota, network blip) — say so honestly instead, and leave
+        // the existing content untouched.
+        responseText = `Maaf, permintaan "${text}" belum bisa diproses AI saat ini. Coba lagi sebentar lagi, atau pakai salah satu Pilihan Cepat di bawah untuk perubahan warna/menu/headline.`
       }
     }
 

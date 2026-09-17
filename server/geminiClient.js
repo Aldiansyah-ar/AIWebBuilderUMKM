@@ -38,7 +38,17 @@ async function callGeminiOnce(apiKey, promptText) {
   }
 }
 
-/** Retry-once orchestration (TSK-02B): auto-retry 1x on failure, validate schema, else signal failure. */
+/**
+ * Retry-once orchestration (TSK-02B): auto-retry 1x on failure, validate
+ * schema, else signal failure.
+ *
+ * Logs each attempt's failure reason (never the API key — that only ever
+ * appears in the request URL, not in any error message here) — a live
+ * `{ ok: false, error: 'llm_failed' }` response otherwise leaves zero trail
+ * of *why* it failed (quota exhausted vs. malformed output vs. network
+ * blip), which made a real production failure impossible to diagnose from
+ * Vercel logs alone.
+ */
 export async function generateWithRetry(apiKey, promptText) {
   let lastError = null
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -47,9 +57,12 @@ export async function generateWithRetry(apiKey, promptText) {
       const { valid, errors } = validateWebsite(data)
       if (valid) return { ok: true, data }
       lastError = `schema invalid: ${errors.join(', ')}`
+      console.error(`[gemini] attempt ${attempt}/${MAX_ATTEMPTS}:`, lastError)
     } catch (err) {
       lastError = err?.message || String(err)
+      console.error(`[gemini] attempt ${attempt}/${MAX_ATTEMPTS} threw:`, lastError)
     }
   }
+  console.error(`[gemini] all ${MAX_ATTEMPTS} attempts failed, giving up:`, lastError)
   return { ok: false, error: lastError }
 }

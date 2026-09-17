@@ -15,6 +15,7 @@ import Contact from '../sections/Contact'
 import StickyWhatsAppButton from '../ui/StickyWhatsAppButton'
 import { generateWhatsappUrl, isValidWhatsappNumber } from '../../lib/templateSelector'
 import { getAccessibleTextColor } from '../../lib/contrast'
+import { scrollToSectionOnClick } from '../../lib/scrollToSection'
 
 // Minimal navbar untuk template profesional
 function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#1e40af', isMobilePreview = false }) {
@@ -27,18 +28,18 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-xs">
       <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between">
-        <a href="#hero" className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-2">
+        <a href="#hero" onClick={scrollToSectionOnClick('hero')} className="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-2">
           <span style={{ color: primaryColor }}>🏢</span>
           <span className="truncate max-w-[200px] sm:max-w-xs">{businessName}</span>
         </a>
 
         <div className="flex items-center gap-6">
           <nav className={[isMobilePreview ? 'hidden' : 'hidden md:flex', 'items-center gap-6 text-sm font-medium text-slate-600'].join(' ')}>
-            <a href="#hero" className="hover:text-blue-600 transition-colors">Beranda</a>
-            <a href="#services" className="hover:text-blue-600 transition-colors">Layanan</a>
-            <a href="#about" className="hover:text-blue-600 transition-colors">Tentang</a>
-            <a href="#testimonials" className="hover:text-blue-600 transition-colors">Testimoni</a>
-            <a href="#contact" className="hover:text-blue-600 transition-colors">Kontak</a>
+            <a href="#hero" onClick={scrollToSectionOnClick('hero')} className="hover:text-blue-600 transition-colors">Beranda</a>
+            <a href="#services" onClick={scrollToSectionOnClick('services')} className="hover:text-blue-600 transition-colors">Layanan</a>
+            <a href="#about" onClick={scrollToSectionOnClick('about')} className="hover:text-blue-600 transition-colors">Tentang</a>
+            <a href="#testimonials" onClick={scrollToSectionOnClick('testimonials')} className="hover:text-blue-600 transition-colors">Testimoni</a>
+            <a href="#contact" onClick={scrollToSectionOnClick('contact')} className="hover:text-blue-600 transition-colors">Kontak</a>
           </nav>
           {hasValidWhatsapp ? (
             <a
@@ -143,8 +144,8 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
         />
       </div>
 
-      {/* Services — light slate bg */}
-      <div id="services">
+      {/* Services — light slate bg (Services itself carries id="services") */}
+      <div>
         <Services
           data={services}
           sectionLabel="Layanan Unggulan Kami"
@@ -155,8 +156,8 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
         />
       </div>
 
-      {/* About — white bg */}
-      <div id="about" className="bg-white border-t border-slate-100">
+      {/* About — white bg (About itself carries id="about") */}
+      <div className="bg-white border-t border-slate-100">
         <About
           data={about}
           meta={meta}
@@ -164,8 +165,8 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
         />
       </div>
 
-      {/* Testimonials — slate 50 */}
-      <div id="testimonials">
+      {/* Testimonials — slate 50 (Testimonials itself carries id="testimonials") */}
+      <div>
         <Testimonials
           data={testimonials}
           className="bg-slate-50 text-blue-600"
@@ -173,8 +174,8 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
         />
       </div>
 
-      {/* Contact — primary color accent */}
-      <div id="contact" style={{ backgroundColor: primaryColor }}>
+      {/* Contact — primary color accent (Contact itself carries id="contact") */}
+      <div style={{ backgroundColor: primaryColor }}>
         <Contact
           data={contact}
           hero={hero}

@@ -95,6 +95,15 @@ export async function mockReviseSuccess(page, data, onRequest) {
   })
 }
 
+/** Mock POST /api/revise failing (llm_failed, no fallback — /api/revise never
+ * returns one, unlike /api/generate's getFallback). Used to prove a failed
+ * revision leaves existing content untouched instead of corrupting it. */
+export async function mockReviseFailure(page) {
+  await page.route('**/api/revise', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'llm_failed' }) })
+  )
+}
+
 /** Locator for the sandboxed live preview iframe (US-01: preview panel). */
 export function previewFrame(page) {
   return page.frameLocator('iframe[title="Live preview website UMKM"]')
