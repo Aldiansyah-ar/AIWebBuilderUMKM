@@ -52,10 +52,16 @@ export const TEMPLATE_META = {
 }
 
 /**
- * Memilih template berdasarkan kategori/teks input secara deterministik
+ * Mendeteksi sinyal kategori dari teks, TANPA fallback — mengembalikan
+ * `null` kalau tidak ada satu pun keyword kategori yang cocok. Dipakai saat
+ * pembeda "user memang menyebut kategori lain" vs "teks ini cuma revisi
+ * biasa yang kebetulan tidak menyebut kategori apa pun" penting, misalnya
+ * guard konfirmasi ganti-kategori (issue #14) — `determineTemplate`
+ * sendiri tidak bisa dipakai untuk itu karena de fault-nya ke Services
+ * begitu tidak ada match sama sekali.
  */
-export function determineTemplate(categoryOrText = '') {
-  if (!categoryOrText) return TEMPLATE_SERVICES
+export function detectCategorySignal(categoryOrText = '') {
+  if (!categoryOrText) return null
 
   const text = String(categoryOrText).toLowerCase()
 
@@ -90,8 +96,16 @@ export function determineTemplate(categoryOrText = '') {
     return TEMPLATE_RETAIL
   }
 
-  // Services keywords / Fallback to Services (Template A)
-  return TEMPLATE_SERVICES
+  return null
+}
+
+/**
+ * Memilih template berdasarkan kategori/teks input secara deterministik.
+ * Selalu mengembalikan sebuah template id — default ke Services (Template
+ * A) kalau tidak ada keyword kategori yang cocok.
+ */
+export function determineTemplate(categoryOrText = '') {
+  return detectCategorySignal(categoryOrText) || TEMPLATE_SERVICES
 }
 
 /**

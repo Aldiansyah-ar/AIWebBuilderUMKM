@@ -29,6 +29,7 @@ import {
   TEMPLATE_RETAIL,
   TEMPLATE_META,
   determineTemplate,
+  detectCategorySignal,
 } from './lib/templateSelector'
 import { exportWebsiteToZip, copyHtmlToClipboard } from './lib/exportWebsite'
 import { useWebsite } from './store/websiteStore.jsx'
@@ -67,6 +68,9 @@ export default function App() {
   const [activeTemplate, setActiveTemplate] = useState(TEMPLATE_FNB)
   const [activeTheme, setActiveTheme] = useState('modern-warm')
   const [activeViewport, setActiveViewport] = useState('desktop')
+  // Pending category-switch confirmation (#14) — set while we're waiting on
+  // the user's "start a new draft?" decision (Aldi's dev-ai design).
+  const [pendingTemplateSwitch, setPendingTemplateSwitch] = useState(null)
 
   // Website data now lives in the backend state manager (TSK-03B), which
   // persists it to sessionStorage so a reload doesn't lose AI-driven edits.
@@ -121,6 +125,7 @@ export default function App() {
 
   // Handle template selection switch
   const handleSelectTemplate = (templateId) => {
+    setPendingTemplateSwitch(null)
     setActiveTemplate(templateId)
     const defaultTheme = TEMPLATE_META[templateId].defaultTheme
     setActiveTheme(defaultTheme)
@@ -166,6 +171,28 @@ export default function App() {
         },
       }))
     }
+  }
+
+  // Theme change scoped to whichever template is already active — used by
+  // the deterministic "biru"/"ungu" quick actions so a color word never
+  // force-switches the template (and loses content) the way it used to
+  // (issue #4). Corporate Blue / Bold Violet are themes on the Services /
+  // Retail templates respectively, but only actually apply if that
+  // template is already active; otherwise this is a no-op fallback within
+  // the current template's own theme list.
+  const handleThemeChangeForActiveTemplate = (themeId) => {
+    const currentThemes = TEMPLATE_META[activeTemplate].themes
+    const themeObj = currentThemes.find((t) => t.id === themeId) || currentThemes[0]
+    setActiveTheme(themeObj.id)
+    setWebsiteData((prev) => ({
+      ...prev,
+      theme: {
+        ...prev.theme,
+        primaryColor: themeObj.primaryColor,
+        secondaryColor: themeObj.secondaryColor,
+        accentColor: themeObj.accentColor,
+      },
+    }))
   }
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -257,22 +284,41 @@ export default function App() {
   }
 
   // User's decision on the "this looks like a different business" prompt
-  // (#14) — confirming starts a fresh draft (overwriting the current one),
-  // declining treats the message as a normal revision on the current draft.
-  const handleCategorySwitchDecision = async (msgId, pending, confirmed) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msgId ? { ...m, type: 'confirm-category-switch-resolved', resolved: confirmed } : m))
-    )
+  // (#14, design shared with Aldi/dev-ai) — confirming starts a fresh draft
+  // for the detected category (running the original message through the AI
+  // so the new draft actually reflects what the user described, not just an
+  // empty template), declining treats the original message as a normal
+  // revision on the draft already in progress.
+  const handleConfirmTemplateSwitch = async () => {
+    if (!pendingTemplateSwitch) return
+    const { pendingTemplateId, pendingText } = pendingTemplateSwitch
+    setPendingTemplateSwitch(null)
+    setMessages((prev) => prev.filter((m) => m.type !== 'confirm-switch'))
     setIsTyping(true)
-    if (confirmed) {
-      await runAiFlow(pending.text, { isNewBusinessDescription: true, detectedTemplateId: pending.detected })
-    } else {
-      await runAiFlow(pending.text, { isNewBusinessDescription: false, detectedTemplateId: pending.detected })
-    }
+    await runAiFlow(pendingText, { isNewBusinessDescription: true, detectedTemplateId: pendingTemplateId })
   }
 
+  const handleCancelTemplateSwitch = async () => {
+    if (!pendingTemplateSwitch) return
+    const { pendingText } = pendingTemplateSwitch
+    setPendingTemplateSwitch(null)
+    setMessages((prev) => prev.filter((m) => m.type !== 'confirm-switch'))
+    setIsTyping(true)
+    await runAiFlow(pendingText, { isNewBusinessDescription: false, detectedTemplateId: activeTemplate })
+  }
+
+  // A draft counts as "real" once there's actual website data with a
+  // business name — used to gate the category-switch confirmation (#14)
+  // so the very first message never triggers a pointless "start a new
+  // draft?" prompt (there's nothing yet to protect). websiteData is never
+  // auto-seeded here (see GitHub issue #3/#33), so this is simply "does a
+  // draft exist" — no need to special-case it against a hardcoded default
+  // name (a real AI-generated business can coincidentally share a name
+  // with a mock preset, e.g. the "Warung Kopi Sejahtera" demo fixture).
+  const isRealDraft = (data) => Boolean(data?.meta?.businessName)
+
   // Process revision prompt (TSK-05D / Hari 6 UI; TSK-02B/03B/05B backend orchestration)
-  const handleSendPrompt = async (promptText) => {
+  const handleSendPrompt = async (promptText, source = 'free-text') => {
     const text = (promptText || inputPrompt).trim()
     if (!text) return
 
@@ -292,10 +338,14 @@ export default function App() {
 
     // Fast, deterministic local actions (1-4) never touch the network —
     // no reason to spend a Gemini call on a plain palette swap. These are
-    // revisions, so they only make sense once a first draft exists —
-    // guard on websiteData to avoid touching a null website (issue #3).
+    // revisions, so they only make sense once a first draft exists (issue
+    // #3), AND only from the dedicated quick-action buttons — free-typed
+    // text is never treated as a deterministic shortcut, since a business
+    // description that happens to mention a color word (e.g. "toko baju
+    // biru") would otherwise get misrouted into a silent theme swap that
+    // destroys the rest of the message's content (issue #4).
     const isDeterministicAction =
-      Boolean(websiteData) && (
+      Boolean(websiteData) && source === 'quick-action' && (
         lower.includes('cokelat') || lower.includes('klasik') || lower.includes('modern warm') ||
         lower.includes('amber') || lower.includes('hangat') || lower.includes('warm amber') ||
         lower.includes('hijau') || lower.includes('sage') || lower.includes('toska') ||
@@ -320,35 +370,62 @@ export default function App() {
         handleThemeChange('forest-sage')
         responseText = 'Warna website diperbarui ke tema Forest Sage yang segar dan natural.'
       } else if (lower.includes('biru') || lower.includes('corporate') || lower.includes('navy')) {
-        if (activeTemplate !== TEMPLATE_SERVICES) {
-          handleSelectTemplate(TEMPLATE_SERVICES)
-        }
-        handleThemeChange('corporate-blue')
-        responseText = 'Website dialihkan ke tema Corporate Blue profesional.'
+        // Scoped to the active template instead of force-switching to
+        // Services — switching used to silently wipe whatever draft the
+        // user already had (issue #4).
+        handleThemeChangeForActiveTemplate('corporate-blue')
+        responseText = 'Warna website diperbarui ke tema Corporate Blue profesional. Konten Anda tetap aman.'
       } else if (lower.includes('ungu') || lower.includes('violet') || lower.includes('retail')) {
-        if (activeTemplate !== TEMPLATE_RETAIL) {
-          handleSelectTemplate(TEMPLATE_RETAIL)
-        }
-        handleThemeChange('bold-violet')
-        responseText = 'Website dialihkan ke tema Bold Violet untuk produk retail.'
+        handleThemeChangeForActiveTemplate('bold-violet')
+        responseText = 'Warna website diperbarui ke tema Bold Violet. Konten Anda tetap aman.'
       }
-      // 2. Check headline revision
+      // 2. Check headline revision — content is tailored per active template
+      // instead of a hardcoded F&B headline (issue #6).
       else if (lower.includes('headline') || lower.includes('judul') || lower.includes('slogan')) {
-        const newTitle = 'Sensasi Kopi Autentik & Ruang Kreatif'
-        const newSubtitle = 'Ruang temu hangat untuk berdiskusi, bekerja santai, dan menikmati racikan biji kopi terbaik Nusantara.'
-        patchWebsite({ hero: { ...websiteData.hero, title: newTitle, subtitle: newSubtitle } })
-        responseText = `Headline berhasil diperbarui menjadi "${newTitle}". Susunan kalimat dioptimalkan untuk daya tarik maksimal!`
-      }
-      // 3. Check menu/product addition — dedicated append action (TSK-05B), not a full replace
-      else if (lower.includes('menu') || lower.includes('tambah') || lower.includes('produk')) {
-        const newItem = {
-          name: 'Pisang Goreng Keju Crispy',
-          description: 'Pisang kepok manis berbalut tepung renyah dengan taburan keju cheddar gurih dan susu kental manis',
-          priceEstimate: 'Rp15.000',
-          icon: '🍌',
+        const headlineByTemplate = {
+          [TEMPLATE_FNB]: {
+            title: 'Sensasi Kopi Autentik & Ruang Kreatif',
+            subtitle: 'Ruang temu hangat untuk berdiskusi, bekerja santai, dan menikmati racikan biji kopi terbaik Nusantara.',
+          },
+          [TEMPLATE_SERVICES]: {
+            title: 'Solusi Profesional untuk Bisnis Anda',
+            subtitle: 'Tim ahli siap membantu Anda mencapai hasil terbaik dengan layanan yang tepat sasaran.',
+          },
+          [TEMPLATE_RETAIL]: {
+            title: 'Koleksi Pilihan, Kualitas Terjamin',
+            subtitle: 'Temukan produk terbaik dengan harga bersaing dan pelayanan cepat.',
+          },
         }
+        const newHeadline = headlineByTemplate[activeTemplate] || headlineByTemplate[TEMPLATE_FNB]
+        patchWebsite({ hero: { ...websiteData.hero, title: newHeadline.title, subtitle: newHeadline.subtitle } })
+        responseText = `Headline berhasil diperbarui menjadi "${newHeadline.title}". Susunan kalimat dioptimalkan untuk daya tarik maksimal!`
+      }
+      // 3. Check menu/product addition — dedicated append action (TSK-05B),
+      // not a full replace, tailored per active template (issue #6).
+      else if (lower.includes('menu') || lower.includes('tambah') || lower.includes('produk')) {
+        const newItemByTemplate = {
+          [TEMPLATE_FNB]: {
+            name: 'Pisang Goreng Keju Crispy',
+            description: 'Pisang kepok manis berbalut tepung renyah dengan taburan keju cheddar gurih dan susu kental manis',
+            priceEstimate: 'Rp15.000',
+            icon: '🍌',
+          },
+          [TEMPLATE_SERVICES]: {
+            name: 'Paket Konsultasi Premium',
+            description: 'Sesi konsultasi intensif 2 jam bersama tim ahli untuk solusi bisnis Anda',
+            priceEstimate: 'Rp500.000',
+            icon: '💼',
+          },
+          [TEMPLATE_RETAIL]: {
+            name: 'Voucher Belanja Rp50.000',
+            description: 'Voucher diskon untuk pembelian berikutnya, berlaku 30 hari',
+            priceEstimate: 'Rp50.000',
+            icon: '🎟️',
+          },
+        }
+        const newItem = newItemByTemplate[activeTemplate] || newItemByTemplate[TEMPLATE_FNB]
         appendServiceItem(newItem)
-        responseText = `Menu baru "${newItem.name}" (${newItem.priceEstimate}) berhasil ditambahkan ke daftar katalog menu!`
+        responseText = `Item baru "${newItem.name}" (${newItem.priceEstimate}) berhasil ditambahkan ke katalog!`
       }
       // 4. Check WhatsApp update
       // NOTE: bare "wa" is deliberately excluded — it false-matches substrings like
@@ -370,34 +447,41 @@ export default function App() {
       // back to deterministic template detection so the demo never stalls
       // when no GEMINI_API_KEY is configured (see server/index.js).
       const detected = determineTemplate(text)
+      // Only a *confident* category keyword match counts as "this looks
+      // like a different business" — determineTemplate's own Services
+      // fallback (when nothing matched at all) would otherwise make an
+      // ordinary revision like "tambahkan menu baru" falsely look like a
+      // category switch just because it doesn't mention F&B/retail words.
+      const categorySignal = detectCategorySignal(text)
+      const categoryMismatch = categorySignal !== null && categorySignal !== activeTemplate
 
-      // No website yet at all → this message must be the first draft
-      // request, never a revision (there's nothing to revise) — see #3.
-      if (!websiteData) {
-        await runAiFlow(text, { isNewBusinessDescription: true, detectedTemplateId: detected })
-        return
-      }
-
-      // A draft already exists but the detected category differs from the
-      // one currently active — don't silently overwrite whatever the user
-      // is working on (see #4/#14). Ask first instead of auto-switching.
-      if (detected !== activeTemplate) {
-        setIsTyping(false)
+      // A *real* draft already exists but the detected category differs
+      // from the one currently active — don't silently overwrite whatever
+      // the user is working on (see #4/#14). Ask first instead of
+      // auto-switching. Gated on isRealDraft (not just "websiteData
+      // exists") so the very first message never triggers a pointless
+      // confirmation.
+      if (categoryMismatch && isRealDraft(websiteData)) {
+        setPendingTemplateSwitch({ pendingTemplateId: detected, pendingText: text })
         setMessages((prev) => [
           ...prev,
           {
-            id: `bot-${Date.now()}`,
+            id: `bot-confirm-${Date.now()}`,
             sender: 'assistant',
-            type: 'confirm-category-switch',
-            text: `Sepertinya pesan ini menjelaskan bisnis baru (kategori terdeteksi: ${TEMPLATE_META[detected].name}), beda dari draft yang sedang dikerjakan sekarang. Mulai draft baru dan timpa yang sekarang, atau ini cuma revisi biasa?`,
-            pending: { text, detected },
+            type: 'confirm-switch',
+            text: `Sepertinya Anda sedang menyebut bisnis kategori ${TEMPLATE_META[detected].name}. Saat ini draft aktif Anda adalah ${TEMPLATE_META[activeTemplate].name} "${websiteData?.meta?.businessName || ''}". Mulai draft baru dan timpa yang sekarang?`,
+            pendingTemplateId: detected,
           },
         ])
+        setIsTyping(false)
         return
       }
 
-      // Same category → normal revision.
-      await runAiFlow(text, { isNewBusinessDescription: false, detectedTemplateId: detected })
+      // Otherwise: no real draft yet (first message, or only a template was
+      // picked without a real description) → generate; same category on an
+      // existing real draft → revise.
+      const isNewBusinessDescription = !isRealDraft(websiteData) || categoryMismatch
+      await runAiFlow(text, { isNewBusinessDescription, detectedTemplateId: detected })
       return
     }
 
@@ -407,6 +491,7 @@ export default function App() {
         id: `bot-${Date.now()}`,
         sender: 'assistant',
         text: responseText,
+        source: isDeterministicAction ? 'deterministic' : 'llm',
       },
     ])
     setIsTyping(false)
@@ -607,26 +692,26 @@ export default function App() {
                     {/* Category-switch confirmation (#14): asks before a
                         detected-category mismatch silently overwrites the
                         draft currently in progress. */}
-                    {msg.type === 'confirm-category-switch' && (
-                      <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2">
+                    {msg.type === 'confirm-switch' && (
+                      <div
+                        className="flex gap-2 pt-2 border-t border-slate-100"
+                        data-testid="confirm-switch-actions"
+                      >
                         <button
-                          onClick={() => handleCategorySwitchDecision(msg.id, msg.pending, true)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          onClick={handleConfirmTemplateSwitch}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          data-testid="confirm-switch-yes"
                         >
                           Ya, mulai draft baru
                         </button>
                         <button
-                          onClick={() => handleCategorySwitchDecision(msg.id, msg.pending, false)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                          onClick={handleCancelTemplateSwitch}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                          data-testid="confirm-switch-no"
                         >
-                          Tidak, ini revisi biasa
+                          Batal, lanjutkan revisi
                         </button>
                       </div>
-                    )}
-                    {msg.type === 'confirm-category-switch-resolved' && (
-                      <p className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 italic">
-                        {msg.resolved ? 'Dipilih: mulai draft baru.' : 'Dipilih: perlakukan sebagai revisi biasa.'}
-                      </p>
                     )}
                   </div>
                 </div>
@@ -654,7 +739,7 @@ export default function App() {
               {EXAMPLE_BUSINESS_PROMPTS.map((example) => (
                 <button
                   key={example.label}
-                  onClick={() => handleSendPrompt(example.text)}
+                  onClick={() => handleSendPrompt(example.text, 'quick-action')}
                   disabled={isTyping}
                   className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200/80 hover:bg-blue-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   title={example.text}
@@ -674,25 +759,25 @@ export default function App() {
               </p>
               <div className="flex flex-wrap gap-1.5">
                 <button
-                  onClick={() => handleSendPrompt('Ubah warna utama jadi cokelat tua klasik.')}
+                  onClick={() => handleSendPrompt('Ubah warna utama jadi cokelat tua klasik.', 'quick-action')}
                   className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 hover:bg-amber-100 transition-colors"
                 >
                   ☕ Cokelat Klasik
                 </button>
                 <button
-                  onClick={() => handleSendPrompt('Ganti headline jadi lebih menarik.')}
+                  onClick={() => handleSendPrompt('Ganti headline jadi lebih menarik.', 'quick-action')}
                   className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
                 >
                   ✏️ Headline Baru
                 </button>
                 <button
-                  onClick={() => handleSendPrompt('Tambahkan menu baru: Pisang Goreng Keju')}
+                  onClick={() => handleSendPrompt('Tambahkan menu baru: Pisang Goreng Keju', 'quick-action')}
                   className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
                 >
                   ➕ Menu Baru
                 </button>
                 <button
-                  onClick={() => handleSendPrompt('Ganti warna jadi warm amber')}
+                  onClick={() => handleSendPrompt('Ganti warna jadi warm amber', 'quick-action')}
                   className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
                 >
                   🍯 Warm Amber
