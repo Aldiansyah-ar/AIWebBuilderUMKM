@@ -13,11 +13,16 @@
 import { buildInitialPrompt } from '../server/prompts.js'
 import { getFallback } from '../shared/schema.js'
 import { generateWithRetry } from '../server/geminiClient.js'
+import { isOriginAllowed } from '../server/security.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ ok: false, error: 'bad_request' })
+  }
+
+  if (!isOriginAllowed(req.headers.origin)) {
+    return res.status(403).json({ ok: false, error: 'origin_not_allowed' })
   }
 
   const apiKey = process.env.GEMINI_API_KEY || ''

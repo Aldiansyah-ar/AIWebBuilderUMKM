@@ -7,6 +7,7 @@
 import { buildInitialPrompt, buildRevisionPrompt, trimHistory } from './prompts.js'
 import { getFallback } from '../shared/schema.js'
 import { generateWithRetry } from './geminiClient.js'
+import { isOriginAllowed } from './security.js'
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -43,6 +44,10 @@ export function registerApiRoutes(server, apiKey) {
   server.middlewares.use(async (req, res, next) => {
     if (req.method !== 'POST' || (req.url !== '/api/generate' && req.url !== '/api/revise')) {
       return next()
+    }
+
+    if (!isOriginAllowed(req.headers.origin)) {
+      return sendJson(res, 403, { ok: false, error: 'origin_not_allowed' })
     }
 
     if (!apiKey) {
