@@ -13,11 +13,20 @@ export function WebsiteProvider({ children }) {
   });
   const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
+  // Save-state indicator (#49) — 'idle' until a draft exists, then 'saved' or
+  // 'error' depending on the sessionStorage write. Previously a quota-exceeded
+  // write failure was silently swallowed ("memory still holds") — that's still
+  // true, but the user now gets told their change isn't actually persisted.
+  const [saveStatus, setSaveStatus] = useState(() => (website ? 'saved' : 'idle'));
 
   useEffect(() => {
+    if (!website) { setSaveStatus('idle'); return; }
     try {
-      if (website) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(website));
-    } catch { /* ponytail: quota exceeded → ignore, memory still holds */ }
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(website));
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    }
   }, [website]);
 
   const setWebsite = useCallback((next, { snapshot = true } = {}) => {
@@ -71,8 +80,23 @@ export function WebsiteProvider({ children }) {
     try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
   }, []);
 
+  // Undo (#48) — MVP scope is a single-step "undo last change", not full
+  // version control: pop the most recent snapshot and make it current,
+  // without pushing the (now-discarded) state back onto history as a redo
+  // slot. Repeated calls keep walking back through whatever snapshots
+  // `setWebsite` already accumulated (up to the last 10 changes).
+  const undo = useCallback(() => {
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      const previous = h[h.length - 1];
+      setWebsiteState(previous);
+      return h.slice(0, -1);
+    });
+    setError(null);
+  }, []);
+
   return (
-    <WebsiteContext.Provider value={{ website, history, error, setError, setWebsite, patchWebsite, appendServiceItem, loadFallback, clear }}>
+    <WebsiteContext.Provider value={{ website, history, error, setError, setWebsite, patchWebsite, appendServiceItem, loadFallback, clear, undo, saveStatus }}>
       {children}
     </WebsiteContext.Provider>
   );

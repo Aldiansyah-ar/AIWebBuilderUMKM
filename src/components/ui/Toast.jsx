@@ -12,11 +12,14 @@
  *   <ToastContainer toasts={toasts} onDismiss={dismissToast} />
  */
 import { useEffect, useState } from 'react'
-import { CheckCircle2, XCircle, X } from 'lucide-react'
+import { CheckCircle2, XCircle, AlertTriangle, X } from 'lucide-react'
 
 const VARIANTS = {
   success: { icon: CheckCircle2, classes: 'bg-emerald-600 border-emerald-500' },
   error: { icon: XCircle, classes: 'bg-rose-600 border-rose-500' },
+  // Degraded-but-usable states (AI fallback, partial failure) — distinct from
+  // 'success' so a real failure never gets a green checkmark (issue #46).
+  warning: { icon: AlertTriangle, classes: 'bg-amber-500 border-amber-400' },
 }
 
 function ToastItem({ id, type = 'success', message, onDismiss, duration = 3500 }) {
