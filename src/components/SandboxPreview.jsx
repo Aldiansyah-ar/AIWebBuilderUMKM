@@ -13,7 +13,7 @@ const FRAME_DOCUMENT = `<!doctype html>
  * in an iframe prevents template styles from leaking into the editor, while a
  * React portal preserves instant updates from the chat state.
  */
-export default function SandboxPreview({ templateId, data, theme, viewport, className = '' }) {
+export default function SandboxPreview({ templateId, data, theme, viewport, isGenerating = false, className = '' }) {
   const frameRef = useRef(null)
   const [frameRoot, setFrameRoot] = useState(null)
 
@@ -58,6 +58,7 @@ export default function SandboxPreview({ templateId, data, theme, viewport, clas
           data={data}
           theme={theme}
           viewport={viewport}
+          isGenerating={isGenerating}
         />,
         frameRoot,
       )}

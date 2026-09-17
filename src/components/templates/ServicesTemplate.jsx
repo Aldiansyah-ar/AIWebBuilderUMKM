@@ -12,7 +12,9 @@ import About from '../sections/About'
 import Services from '../sections/Services'
 import Testimonials from '../sections/Testimonials'
 import Contact from '../sections/Contact'
+import StickyWhatsAppButton from '../ui/StickyWhatsAppButton'
 import { generateWhatsappUrl, isValidWhatsappNumber } from '../../lib/templateSelector'
+import { getAccessibleTextColor } from '../../lib/contrast'
 
 // Minimal navbar untuk template profesional
 function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#1e40af', isMobilePreview = false }) {
@@ -38,18 +40,25 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
             <a href="#testimonials" className="hover:text-blue-600 transition-colors">Testimoni</a>
             <a href="#contact" className="hover:text-blue-600 transition-colors">Kontak</a>
           </nav>
-          <a
-            href={waUrl}
-            target={hasValidWhatsapp ? '_blank' : undefined}
-            rel={hasValidWhatsapp ? 'noopener noreferrer' : undefined}
-            aria-disabled={!hasValidWhatsapp}
-            className={[
-              'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-full shadow-sm hover:shadow transition-all active:scale-95',
-              !hasValidWhatsapp ? 'pointer-events-none opacity-50' : '',
-            ].join(' ')}
-          >
-            <span>Konsultasi WA</span>
-          </a>
+          {hasValidWhatsapp ? (
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-full shadow-sm hover:shadow transition-all active:scale-95"
+            >
+              <span>Konsultasi WA</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="Nomor WhatsApp belum valid"
+              className="inline-flex items-center gap-2 bg-[#25d366] text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-full shadow-sm opacity-50 cursor-not-allowed"
+            >
+              <span>Konsultasi WA</span>
+            </button>
+          )}
         </div>
       </div>
     </header>
@@ -104,6 +113,11 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
     if (dataTheme.accentColor) _accentColor = dataTheme.accentColor
   }
 
+  // AI-generated theme colors can be any arbitrary hex — validate contrast
+  // instead of assuming white text always works on top of primaryColor
+  // (WCAG AA, issue #22).
+  const onPrimaryText = getAccessibleTextColor(primaryColor)
+
   return (
     <div className="min-h-screen bg-white text-slate-800">
       {/* Navbar */}
@@ -121,10 +135,11 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
           data={hero}
           meta={meta}
           contact={contact}
-          className="text-white min-h-[65vh] flex flex-col justify-center"
+          className="min-h-[65vh] flex flex-col justify-center"
           style={{ backgroundColor: primaryColor }}
           _theme="services"
           mobilePreview={viewport === 'mobile'}
+          textColor={onPrimaryText}
         />
       </div>
 
@@ -164,7 +179,7 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
           data={contact}
           hero={hero}
           meta={meta}
-          className="text-white [&_h2]:text-white [&_p]:text-blue-100 [&_.bg-slate-50]:bg-white/10 [&_.text-slate-800]:text-white [&_.text-slate-700]:text-blue-100 [&_.text-slate-400]:text-blue-200 [&_.text-slate-500]:text-blue-200"
+          textColor={onPrimaryText}
         />
       </div>
 
@@ -172,6 +187,11 @@ export default function ServicesTemplate({ data = {}, theme, viewport = 'desktop
         businessName={meta.businessName || 'Solusi Digital Pro'}
         tagline={meta.tagline}
         primaryColor={primaryColor}
+      />
+
+      <StickyWhatsAppButton
+        whatsappNumber={contact.whatsappNumber}
+        message={hero.ctaWhatsappMessage || 'Halo, saya ingin konsultasi gratis mengenai layanan ' + (meta.businessName || 'Solusi Digital Pro')}
       />
     </div>
   )

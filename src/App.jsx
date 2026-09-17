@@ -170,6 +170,107 @@ export default function App() {
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+  // 4-phase onboarding progress ("info bisnis -> pilih template -> AI susun
+  // konten -> preview siap"), rendered inside the assistant bubble via
+  // msg.steps (issue #12 — the markup already existed but nothing filled it).
+  const ONBOARDING_STEP_LABELS = [
+    'Memahami info bisnis',
+    'Memilih template',
+    'AI menyusun konten',
+    'Preview siap',
+  ]
+  const stepsAt = (activeIdx, doneUpTo) =>
+    ONBOARDING_STEP_LABELS.map((label, idx) => ({
+      label,
+      status: idx <= doneUpTo ? 'done' : idx === activeIdx ? 'in-progress' : 'pending',
+    }))
+
+  // Shared AI call for both a first draft and a (confirmed) revision —
+  // drives the same progress bubble through all 4 phases and applies the
+  // result. Used by the general chat path and by the category-switch
+  // confirmation flow (#14).
+  const runAiFlow = async (text, { isNewBusinessDescription, detectedTemplateId }) => {
+    const progressId = `bot-${Date.now()}`
+    setMessages((prev) => [
+      ...prev,
+      { id: progressId, sender: 'assistant', text: 'Sedang memproses permintaan Anda...', steps: stepsAt(0, -1) },
+    ])
+
+    await wait(200)
+    setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(1, 0) } : m)))
+
+    const history = toChatHistory(messages)
+    await wait(150)
+    setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(2, 1) } : m)))
+
+    const result = isNewBusinessDescription
+      ? await generateWebsite(text)
+      : await reviseWebsite(websiteData, text, history)
+
+    setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(3, 2) } : m)))
+
+    let responseText = ''
+
+    if (result.ok) {
+      if (isNewBusinessDescription) handleSelectTemplate(detectedTemplateId)
+      patchWebsite(result.data)
+      if (result.data.templateId) setActiveTemplate(result.data.templateId)
+      responseText = isNewBusinessDescription
+        ? `Draft website baru berhasil dibuat oleh AI untuk kategori ${TEMPLATE_META[detectedTemplateId].name}!`
+        : `Permintaan revisi "${text}" berhasil diterapkan oleh AI!`
+    } else {
+      // Offline/failure fallback — same UX as before the backend integration.
+      if (result.error && result.error !== 'not_configured') {
+        showToast('info', 'AI tidak merespons, menggunakan mode offline.')
+      }
+      const backendFallback = result.fallback
+
+      if (backendFallback) {
+        const fallbackTemplateId =
+          backendFallback.templateId && TEMPLATE_META[backendFallback.templateId]
+            ? backendFallback.templateId
+            : detectedTemplateId
+
+        if (fallbackTemplateId !== activeTemplate) {
+          handleSelectTemplate(fallbackTemplateId)
+        }
+
+        patchWebsite(backendFallback)
+        if (backendFallback.templateId) {
+          setActiveTemplate(backendFallback.templateId)
+        }
+        responseText = `AI sedang offline — kategori "${TEMPLATE_META[fallbackTemplateId].name}" tetap terdeteksi via fallback backend. Semua komponen diperbarui!`
+      } else if (isNewBusinessDescription) {
+        handleSelectTemplate(detectedTemplateId)
+        responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detectedTemplateId].name}. Semua komponen diperbarui!`
+      } else {
+        patchWebsite({ meta: { ...websiteData.meta, tagline: text.slice(0, 45) } })
+        responseText = `Permintaan revisi "${text}" telah diterapkan pada konten website secara real-time!`
+      }
+    }
+
+    await wait(120)
+    setMessages((prev) =>
+      prev.map((m) => (m.id === progressId ? { ...m, text: responseText, steps: stepsAt(3, 3) } : m))
+    )
+    setIsTyping(false)
+  }
+
+  // User's decision on the "this looks like a different business" prompt
+  // (#14) — confirming starts a fresh draft (overwriting the current one),
+  // declining treats the message as a normal revision on the current draft.
+  const handleCategorySwitchDecision = async (msgId, pending, confirmed) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, type: 'confirm-category-switch-resolved', resolved: confirmed } : m))
+    )
+    setIsTyping(true)
+    if (confirmed) {
+      await runAiFlow(pending.text, { isNewBusinessDescription: true, detectedTemplateId: pending.detected })
+    } else {
+      await runAiFlow(pending.text, { isNewBusinessDescription: false, detectedTemplateId: pending.detected })
+    }
+  }
+
   // Process revision prompt (TSK-05D / Hari 6 UI; TSK-02B/03B/05B backend orchestration)
   const handleSendPrompt = async (promptText) => {
     const text = (promptText || inputPrompt).trim()
@@ -269,52 +370,35 @@ export default function App() {
       // back to deterministic template detection so the demo never stalls
       // when no GEMINI_API_KEY is configured (see server/index.js).
       const detected = determineTemplate(text)
-      const history = toChatHistory(messages)
+
       // No website yet at all → this message must be the first draft
       // request, never a revision (there's nothing to revise) — see #3.
-      const isNewBusinessDescription = !websiteData || detected !== activeTemplate
-
-      const result = isNewBusinessDescription
-        ? await generateWebsite(text)
-        : await reviseWebsite(websiteData, text, history)
-
-      if (result.ok) {
-        if (isNewBusinessDescription) handleSelectTemplate(detected)
-        patchWebsite(result.data)
-        if (result.data.templateId) setActiveTemplate(result.data.templateId)
-        responseText = isNewBusinessDescription
-          ? `Draft website baru berhasil dibuat oleh AI untuk kategori ${TEMPLATE_META[detected].name}!`
-          : `Permintaan revisi "${text}" berhasil diterapkan oleh AI!`
-      } else {
-        // Offline/failure fallback — same UX as before the backend integration.
-        if (result.error && result.error !== 'not_configured') {
-          showToast('info', 'AI tidak merespons, menggunakan mode offline.')
-        }
-        const backendFallback = result.fallback
-
-        if (backendFallback) {
-          const fallbackTemplateId =
-            backendFallback.templateId && TEMPLATE_META[backendFallback.templateId]
-            ? backendFallback.templateId
-            : detected
-
-          if (fallbackTemplateId !== activeTemplate) {
-            handleSelectTemplate(fallbackTemplateId)
-          }
-    
-          patchWebsite(backendFallback)
-          if (backendFallback.templateId) {
-            setActiveTemplate(backendFallback.templateId)
-          }
-          responseText = `AI sedang offline — kategori "${TEMPLATE_META[fallbackTemplateId].name}" tetap terdeteksi via fallback backend. Semua komponen diperbarui!`
-        } else if (isNewBusinessDescription) {
-            handleSelectTemplate(detected)
-            responseText = `Sistem mendeteksi kategori bisnis dan menyesuaikan template ke ${TEMPLATE_META[detected].name}. Semua komponen diperbarui!`
-        } else {
-            patchWebsite({ meta: { ...websiteData.meta, tagline: text.slice(0, 45) } })
-            responseText = `Permintaan revisi "${text}" telah diterapkan pada konten website secara real-time!`
-        }
+      if (!websiteData) {
+        await runAiFlow(text, { isNewBusinessDescription: true, detectedTemplateId: detected })
+        return
       }
+
+      // A draft already exists but the detected category differs from the
+      // one currently active — don't silently overwrite whatever the user
+      // is working on (see #4/#14). Ask first instead of auto-switching.
+      if (detected !== activeTemplate) {
+        setIsTyping(false)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `bot-${Date.now()}`,
+            sender: 'assistant',
+            type: 'confirm-category-switch',
+            text: `Sepertinya pesan ini menjelaskan bisnis baru (kategori terdeteksi: ${TEMPLATE_META[detected].name}), beda dari draft yang sedang dikerjakan sekarang. Mulai draft baru dan timpa yang sekarang, atau ini cuma revisi biasa?`,
+            pending: { text, detected },
+          },
+        ])
+        return
+      }
+
+      // Same category → normal revision.
+      await runAiFlow(text, { isNewBusinessDescription: false, detectedTemplateId: detected })
+      return
     }
 
     setMessages((prev) => [
@@ -360,17 +444,17 @@ export default function App() {
       {/* ============================================================
           TOP HEADER BAR (Reference: image.png)
           ============================================================ */}
-      <header className="h-14 bg-[#0f172a] border-b border-slate-800 px-4 lg:px-6 flex items-center justify-between shrink-0 z-30">
+      <header className="min-h-14 bg-[#0f172a] border-b border-slate-800 px-3 sm:px-4 lg:px-6 flex items-center justify-between shrink-0 z-30 gap-2">
         {/* Brand Left */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           <span className="text-amber-400 text-lg leading-none select-none">✦</span>
-          <span className="font-extrabold text-white text-base tracking-tight">
-            UMKM Builder
+          <span className="font-extrabold text-white text-sm sm:text-base tracking-tight whitespace-nowrap">
+            UMKM<span className="hidden sm:inline"> Builder</span>
           </span>
         </div>
 
         {/* Center / Right Toolbar */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-4 min-w-0">
           {/* Active Business Badge */}
           <div className="hidden md:flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 px-3 py-1 rounded-full text-xs">
             <span className="text-slate-400 font-semibold tracking-wider text-[11px] uppercase">
@@ -382,23 +466,28 @@ export default function App() {
             </span>
           </div>
 
-          {/* Template Selector Pills */}
-          <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
+          {/* Template Selector Pills — label text hidden below sm so the
+              pills don't force the header to wrap on narrow phones
+              (~390px); emoji + title tooltip still identify each one
+              (issue #32). */}
+          <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 shrink-0">
             {Object.values(TEMPLATE_META).map((t) => {
               const isActive = activeTemplate === t.id
+              const [emoji, ...rest] = t.label.split(' ')
               return (
                 <button
                   key={t.id}
                   onClick={() => handleSelectTemplate(t.id)}
                   className={[
-                    'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 flex items-center gap-1.5',
+                    'px-2 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 flex items-center gap-1.5',
                     isActive
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-400 hover:text-white hover:bg-slate-700/50',
                   ].join(' ')}
                   title={t.name}
                 >
-                  <span>{t.label}</span>
+                  <span aria-hidden={rest.length > 0}>{emoji}</span>
+                  {rest.length > 0 && <span className="hidden sm:inline">{rest.join(' ')}</span>}
                 </button>
               )
             })}
@@ -407,7 +496,7 @@ export default function App() {
           {/* Publish Button (TSK-06D — stretch goal, disabled: no deploy provider configured) */}
           <button
             disabled
-            className="flex items-center gap-1.5 bg-slate-800/60 border border-slate-700/60 text-slate-400 text-xs font-semibold px-3 sm:px-3.5 py-1.5 rounded-lg cursor-not-allowed"
+            className="flex items-center gap-1.5 bg-slate-800/60 border border-slate-700/60 text-slate-400 text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-lg cursor-not-allowed shrink-0"
             title="Publish otomatis (stretch goal) — segera hadir. Gunakan Download Website untuk saat ini."
           >
             <UploadCloud className="w-3.5 h-3.5" />
@@ -417,7 +506,7 @@ export default function App() {
           {/* Download Website Button */}
           <button
             onClick={handleDownload}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white text-xs font-semibold px-3 sm:px-3.5 py-1.5 rounded-lg transition-all shadow-xs"
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-lg transition-all shadow-xs shrink-0"
             title="Download bundle ZIP (HTML siap pakai)"
           >
             <Download className="w-3.5 h-3.5" />
@@ -433,7 +522,10 @@ export default function App() {
         {/* ------------------------------------------------------------
             LEFT PANEL: AI CHAT ASSISTANT & REVISIONS
             ------------------------------------------------------------ */}
-        <aside className="w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex flex-col shrink-0 h-[50vh] md:h-full shadow-xs overflow-hidden">
+        {/* ~35% chat / ~65% preview per US-01 acceptance criteria, with
+            min/max guard rails so the panel stays usable at very
+            narrow/wide viewports instead of a fixed px width (issue #9). */}
+        <aside className="w-full md:w-[35%] md:min-w-[300px] md:max-w-[420px] bg-white border-r border-slate-200 flex flex-col shrink-0 h-[50vh] md:h-full shadow-xs overflow-hidden">
           {/* Assistant Header */}
           <div className="px-4 py-3.5 border-b border-slate-100 bg-white shrink-0">
             <div className="flex items-center justify-between text-[11px] mb-1">
@@ -510,6 +602,31 @@ export default function App() {
                           ))}
                         </div>
                       </div>
+                    )}
+
+                    {/* Category-switch confirmation (#14): asks before a
+                        detected-category mismatch silently overwrites the
+                        draft currently in progress. */}
+                    {msg.type === 'confirm-category-switch' && (
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleCategorySwitchDecision(msg.id, msg.pending, true)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                        >
+                          Ya, mulai draft baru
+                        </button>
+                        <button
+                          onClick={() => handleCategorySwitchDecision(msg.id, msg.pending, false)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                        >
+                          Tidak, ini revisi biasa
+                        </button>
+                      </div>
+                    )}
+                    {msg.type === 'confirm-category-switch-resolved' && (
+                      <p className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 italic">
+                        {msg.resolved ? 'Dipilih: mulai draft baru.' : 'Dipilih: perlakukan sebagai revisi biasa.'}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -629,7 +746,7 @@ export default function App() {
             ------------------------------------------------------------ */}
         <main className="flex-1 flex flex-col min-w-0 bg-slate-100 overflow-hidden">
           {/* Sub-Header Toolbar (Viewport + Theme Palette Switcher) */}
-          <div className="h-12 bg-white border-b border-slate-200 px-4 lg:px-6 flex items-center justify-between shrink-0">
+          <div className="min-h-12 bg-white border-b border-slate-200 px-3 sm:px-4 lg:px-6 py-1.5 sm:py-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 shrink-0">
             {/* Viewport Switcher */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80">
               <button
@@ -668,6 +785,9 @@ export default function App() {
                     <button
                       key={thm.id}
                       onClick={() => handleThemeChange(thm.id)}
+                      title={thm.label}
+                      aria-label={thm.label}
+                      aria-pressed={isActive}
                       className={[
                         'px-2.5 py-1 rounded-full text-xs font-semibold transition-all border flex items-center gap-1.5',
                         isActive
@@ -679,7 +799,13 @@ export default function App() {
                         className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: thm.primaryColor }}
                       />
+                      {/* Label stays readable at every breakpoint — a color
+                          swatch alone isn't enough to distinguish themes for
+                          users with color vision deficiency (issue #11). A
+                          short label replaces the full one on narrow screens
+                          instead of disappearing entirely. */}
                       <span className="hidden sm:inline">{thm.label}</span>
+                      <span className="sm:hidden">{thm.label.replace(/\s*\(.*\)$/, '')}</span>
                     </button>
                   )
                 })}
@@ -703,6 +829,7 @@ export default function App() {
                 data={websiteData}
                 theme={activeTheme}
                 viewport={activeViewport}
+                isGenerating={isTyping && !websiteData}
                 className={activeViewport === 'mobile' ? 'min-h-0' : 'min-h-[720px]'}
               />
             </div>
