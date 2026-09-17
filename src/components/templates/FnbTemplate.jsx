@@ -15,6 +15,7 @@ import Contact from '../sections/Contact'
 import StickyWhatsAppButton from '../ui/StickyWhatsAppButton'
 import { generateWhatsappUrl, isValidWhatsappNumber } from '../../lib/templateSelector'
 import { getAccessibleTextColor } from '../../lib/contrast'
+import { scrollToSectionOnClick } from '../../lib/scrollToSection'
 
 // Warm-style navbar
 function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor = '#452821', textColor = '#ffffff', isMobilePreview = false }) {
@@ -30,7 +31,7 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
       style={{ backgroundColor: primaryColor }}
     >
       <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between">
-        <a href="#hero" className="font-extrabold text-lg sm:text-xl tracking-tight flex items-center gap-2" style={{ color: textColor }}>
+        <a href="#hero" onClick={scrollToSectionOnClick('hero')} className="font-extrabold text-lg sm:text-xl tracking-tight flex items-center gap-2" style={{ color: textColor }}>
           <span>☕</span>
           <span className="truncate max-w-[200px] sm:max-w-xs">{businessName}</span>
         </a>
@@ -40,10 +41,10 @@ function Navbar({ businessName, whatsappNumber, ctaWhatsappMessage, primaryColor
             className={[isMobilePreview ? 'hidden' : 'hidden md:flex', 'items-center gap-6 text-sm font-medium'].join(' ')}
             style={{ color: textColor, opacity: 0.9 }}
           >
-            <a href="#hero" className="hover:opacity-100 transition-opacity">Beranda</a>
-            <a href="#services" className="hover:opacity-100 transition-opacity">Menu</a>
-            <a href="#about" className="hover:opacity-100 transition-opacity">Tentang</a>
-            <a href="#contact" className="hover:opacity-100 transition-opacity">Kontak</a>
+            <a href="#hero" onClick={scrollToSectionOnClick('hero')} className="hover:opacity-100 transition-opacity">Beranda</a>
+            <a href="#services" onClick={scrollToSectionOnClick('services')} className="hover:opacity-100 transition-opacity">Menu</a>
+            <a href="#about" onClick={scrollToSectionOnClick('about')} className="hover:opacity-100 transition-opacity">Tentang</a>
+            <a href="#contact" onClick={scrollToSectionOnClick('contact')} className="hover:opacity-100 transition-opacity">Kontak</a>
           </nav>
           {hasValidWhatsapp ? (
             <a
@@ -166,8 +167,8 @@ export default function FnbTemplate({ data = {}, theme, viewport = 'desktop' }) 
       {/* Wave into Content */}
       <WaveDivider color={pageBg} />
 
-      {/* Menu section — culinary menu focus */}
-      <div id="services">
+      {/* Menu section — culinary menu focus (Services itself carries id="services") */}
+      <div>
         <Services
           data={services}
           sectionLabel="Menu Pilihan Kami"
@@ -183,8 +184,8 @@ export default function FnbTemplate({ data = {}, theme, viewport = 'desktop' }) 
         <WaveDivider color="#ffffff" />
       </div>
 
-      {/* About — white bg */}
-      <div id="about" className="bg-white">
+      {/* About — white bg (About itself carries id="about") */}
+      <div className="bg-white">
         <About
           data={about}
           meta={meta}
@@ -194,8 +195,8 @@ export default function FnbTemplate({ data = {}, theme, viewport = 'desktop' }) 
 
       <WaveDivider color={pageBg} />
 
-      {/* Testimonials */}
-      <div id="testimonials">
+      {/* Testimonials (Testimonials itself carries id="testimonials") */}
+      <div>
         <Testimonials
           data={testimonials}
           className="text-amber-900"
@@ -203,8 +204,8 @@ export default function FnbTemplate({ data = {}, theme, viewport = 'desktop' }) 
         />
       </div>
 
-      {/* Contact Section */}
-      <div id="contact" style={{ backgroundColor: primaryColor }}>
+      {/* Contact Section (Contact itself carries id="contact") */}
+      <div style={{ backgroundColor: primaryColor }}>
         <Contact
           data={contact}
           hero={hero}
