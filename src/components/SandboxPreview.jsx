@@ -47,7 +47,13 @@ export default function SandboxPreview({ templateId, data, theme, viewport, isGe
       ref={frameRef}
       title="Live preview website UMKM"
       srcDoc={FRAME_DOCUMENT}
-      sandbox="allow-same-origin allow-popups"
+      // allow-popups-to-escape-sandbox: without it, a target="_blank" link
+      // clicked inside this sandbox (e.g. the WA CTA's wa.me link, which
+      // redirects to api.whatsapp.com) opens a popup that inherits this
+      // iframe's sandbox restrictions instead of behaving like a normal new
+      // tab — Chrome then refuses to load the redirect target at all
+      // (ERR_BLOCKED_BY_RESPONSE).
+      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       onLoad={handleLoad}
       className={`block w-full h-full border-0 bg-white ${className}`}
     >
