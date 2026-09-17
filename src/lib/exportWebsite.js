@@ -4,7 +4,7 @@
  * tombol fallback 'Salin Kode HTML'").
  */
 import JSZip from 'jszip'
-import { generateWhatsappUrl } from './templateSelector'
+import { generateWhatsappUrl, isValidWhatsappNumber } from './templateSelector'
 
 const escapeHtml = (value = '') => String(value)
   .replaceAll('&', '&amp;')
@@ -13,7 +13,21 @@ const escapeHtml = (value = '') => String(value)
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;')
 
-function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+
+/** Render a WhatsApp CTA as a real disabled <button> when the number is
+ * invalid (mirrors Hero.jsx/Contact.jsx and issue #10 — no aria-disabled
+ * links), or a live wa.me link otherwise. */
+function waCtaHtml({ hasValidWhatsapp, waUrl, classes, label, id, ariaLabel }) {
+  const idAttr = id ? ` id="${id}"` : ''
+  if (!hasValidWhatsapp) {
+    return `<button type="button" disabled title="Nomor WhatsApp belum valid" aria-label="Nomor WhatsApp belum valid"${idAttr} class="${classes} opacity-50 cursor-not-allowed pointer-events-none">${label}</button>`
+  }
+  const ariaAttr = ariaLabel ? ` aria-label="${escapeHtml(ariaLabel)}"` : ''
+  return `<a href="${waUrl}" target="_blank" rel="noopener noreferrer"${idAttr}${ariaAttr} class="${classes}">${label}</a>`
+}
+
+export function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
   const {
     meta = {},
     hero = {},
@@ -31,9 +45,11 @@ function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
   const subtitle = escapeHtml(hero.subtitle || '')
   const ctaText = escapeHtml(hero.ctaText || 'Pesan via WhatsApp')
   const waNumber = contact.whatsappNumber || '628123456789'
+  const hasValidWhatsapp = isValidWhatsappNumber(waNumber)
   const waUrl = generateWhatsappUrl(waNumber, hero.ctaWhatsappMessage || `Halo, saya ingin pesan di ${businessName}`)
 
-  const primaryColor = theme.primaryColor || (templateId === 'template-fnb' ? '#452821' : templateId === 'template-retail' ? '#6d28d9' : '#1e40af')
+  const defaultPrimaryColor = templateId === 'template-fnb' ? '#452821' : templateId === 'template-retail' ? '#6d28d9' : '#1e40af'
+  const primaryColor = HEX_COLOR_RE.test(theme.primaryColor || '') ? theme.primaryColor : defaultPrimaryColor
 
   const servicesHtml = services
     .map(
@@ -87,9 +103,12 @@ function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
           <a href="#about" class="hover:text-white">Tentang</a>
           <a href="#contact" class="hover:text-white">Kontak</a>
         </nav>
-        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-sm font-bold px-4 py-2 rounded-full shadow-sm">
-          Pesan via WA
-        </a>
+        ${waCtaHtml({
+          hasValidWhatsapp,
+          waUrl,
+          classes: 'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white text-sm font-bold px-4 py-2 rounded-full shadow-sm',
+          label: 'Pesan via WA',
+        })}
       </div>
     </div>
   </header>
@@ -100,9 +119,12 @@ function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
       ${tagline ? `<div class="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase bg-white/15 backdrop-blur-md border border-white/20 text-white/95">${tagline}</div>` : ''}
       <h1 class="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">${title}</h1>
       ${subtitle ? `<p class="text-lg md:text-xl text-white/90 max-w-2xl font-normal leading-relaxed">${subtitle}</p>` : ''}
-      <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white font-bold px-8 py-4 rounded-full text-lg shadow-lg hover:shadow-xl transition-all">
-        ${ctaText}
-      </a>
+      ${waCtaHtml({
+        hasValidWhatsapp,
+        waUrl,
+        classes: 'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white font-bold px-8 py-4 rounded-full text-lg shadow-lg hover:shadow-xl transition-all',
+        label: ctaText,
+      })}
     </div>
   </section>
 
@@ -140,9 +162,12 @@ function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
     <div class="max-w-4xl mx-auto text-center space-y-6">
       <h2 class="text-3xl md:text-4xl font-extrabold">Siap Terhubung dengan ${businessName}?</h2>
       <p class="text-white/80 max-w-xl mx-auto">Hubungi kami langsung via WhatsApp untuk pemesanan cepat dan info lengkap.</p>
-      <a href="${waUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white font-bold px-8 py-4 rounded-full text-lg shadow-lg">
-        ${ctaText}
-      </a>
+      ${waCtaHtml({
+        hasValidWhatsapp,
+        waUrl,
+        classes: 'inline-flex items-center gap-2 bg-[#25d366] hover:bg-[#128c4a] text-white font-bold px-8 py-4 rounded-full text-lg shadow-lg',
+        label: ctaText,
+      })}
       <div class="pt-8 text-sm text-white/70 space-y-1">
         ${contact.address ? `<p>📍 ${escapeHtml(contact.address)}</p>` : ''}
         ${contact.instagram ? `<p>📸 ${escapeHtml(contact.instagram)}</p>` : ''}
@@ -158,19 +183,17 @@ function buildStandaloneHtml(data = {}, templateId = 'template-fnb') {
   <!-- Sticky mobile WhatsApp CTA (issue #27): floats once the Hero section
        has scrolled out of view, so the CTA stays reachable on a long
        single-page mobile layout without scrolling back up. -->
-  <a
-    id="sticky-wa-cta"
-    href="${waUrl}"
-    target="_blank"
-    rel="noopener noreferrer"
-    aria-label="Hubungi kami via WhatsApp"
-    class="md:hidden fixed bottom-5 right-5 z-50 hidden items-center justify-center w-14 h-14 rounded-full bg-[#25d366] text-white shadow-xl hover:bg-[#128c4a] active:scale-95 transition-all"
-  >
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6" aria-hidden="true">
+  ${waCtaHtml({
+    hasValidWhatsapp,
+    waUrl,
+    id: 'sticky-wa-cta',
+    ariaLabel: 'Hubungi kami via WhatsApp',
+    classes: 'md:hidden fixed bottom-5 right-5 z-50 hidden items-center justify-center w-14 h-14 rounded-full bg-[#25d366] text-white shadow-xl hover:bg-[#128c4a] active:scale-95 transition-all',
+    label: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6" aria-hidden="true">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
       <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.113 1.526 5.84L0 24l6.337-1.506A11.953 11.953 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.896 0-3.677-.502-5.214-1.381l-.374-.215-3.762.894.944-3.666-.237-.387A9.952 9.952 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
-    </svg>
-  </a>
+    </svg>`,
+  })}
   <script>
     (function () {
       var cta = document.getElementById('sticky-wa-cta');
