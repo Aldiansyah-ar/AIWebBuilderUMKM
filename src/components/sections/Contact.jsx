@@ -29,20 +29,39 @@ const WhatsAppIcon = () => (
   </svg>
 )
 
-function ContactItem({ icon, label, value }) {
+function ContactItem({ icon, label, value, textColor }) {
   if (!value) return null
   return (
     <div className="flex items-start gap-3">
       <span className="mt-0.5 text-xl shrink-0">{icon}</span>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-        <p className="text-slate-700 text-sm mt-0.5">{value}</p>
+        <p
+          className="text-xs font-semibold uppercase tracking-wide text-slate-400"
+          style={textColor ? { color: textColor, opacity: 0.7 } : undefined}
+        >
+          {label}
+        </p>
+        <p
+          className="text-slate-700 text-sm mt-0.5"
+          style={textColor ? { color: textColor } : undefined}
+        >
+          {value}
+        </p>
       </div>
     </div>
   )
 }
 
-export default function Contact({ data = {}, hero = {}, meta = {}, className = '' }) {
+export default function Contact({
+  data = {},
+  hero = {},
+  meta = {},
+  className = '',
+  // Computed via getAccessibleTextColor(primaryColor) by the template when
+  // this section sits on a colored background — see Hero.jsx (issue #22).
+  textColor,
+  mutedBg = 'bg-white/10',
+}) {
   const {
     whatsappNumber = '',
     address = '',
@@ -67,10 +86,10 @@ export default function Contact({ data = {}, hero = {}, meta = {}, className = '
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {/* CTA column */}
           <div className="space-y-5">
-            <h2 className="text-3xl md:text-4xl font-bold">
+            <h2 className="text-3xl md:text-4xl font-bold" style={textColor ? { color: textColor } : undefined}>
               Siap Berbicara dengan {businessName}?
             </h2>
-            <p className="text-slate-500 leading-relaxed">
+            <p className="text-slate-500 leading-relaxed" style={textColor ? { color: textColor, opacity: 0.85 } : undefined}>
               Hubungi kami langsung via WhatsApp. Kami siap membantu!
             </p>
             <Button
@@ -79,8 +98,8 @@ export default function Contact({ data = {}, hero = {}, meta = {}, className = '
               size="lg"
               target={hasValidWhatsapp ? '_blank' : undefined}
               rel={hasValidWhatsapp ? 'noopener noreferrer' : undefined}
-              aria-disabled={!hasValidWhatsapp}
-              className={!hasValidWhatsapp ? 'pointer-events-none opacity-50' : ''}
+              disabled={!hasValidWhatsapp}
+              title={!hasValidWhatsapp ? 'Nomor WhatsApp belum valid' : undefined}
             >
               <WhatsAppIcon />
               {ctaText}
@@ -88,12 +107,12 @@ export default function Contact({ data = {}, hero = {}, meta = {}, className = '
           </div>
 
           {/* Info column */}
-          <div className="bg-slate-50 rounded-2xl p-6 space-y-5">
-            <h3 className="font-semibold text-slate-800">Informasi Kontak</h3>
-            <ContactItem icon="📞" label="WhatsApp" value={hasValidWhatsapp ? `+${normalizedWhatsapp}` : 'Nomor WhatsApp belum valid'} />
-            <ContactItem icon="📍" label="Alamat" value={address} />
-            <ContactItem icon="📸" label="Instagram" value={instagram} />
-            <ContactItem icon="✉️" label="Email" value={email} />
+          <div className={['rounded-2xl p-6 space-y-5', textColor ? mutedBg : 'bg-slate-50'].join(' ')}>
+            <h3 className="font-semibold text-slate-800" style={textColor ? { color: textColor } : undefined}>Informasi Kontak</h3>
+            <ContactItem icon="📞" label="WhatsApp" value={hasValidWhatsapp ? `+${normalizedWhatsapp}` : 'Nomor WhatsApp belum valid'} textColor={textColor} />
+            <ContactItem icon="📍" label="Alamat" value={address} textColor={textColor} />
+            <ContactItem icon="📸" label="Instagram" value={instagram} textColor={textColor} />
+            <ContactItem icon="✉️" label="Email" value={email} textColor={textColor} />
           </div>
         </div>
       </Container>

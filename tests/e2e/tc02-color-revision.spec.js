@@ -7,7 +7,14 @@ import { mockGenerateSuccess, previewFrame, WARUNG_KOPI_DRAFT } from './fixtures
 //   WhatsApp tetap utuh. (Wajib Lulus)
 // Also US-07 acceptance criteria: "Revisi warna/tema via chat reaktif dan
 // instan tanpa merusak konten atau nomor kontak WhatsApp."
-const TC02_INPUT = 'Ganti nuansa warna jadi cokelat tua klasik'
+//
+// Triggered via the "☕ Cokelat Klasik" quick-action button rather than
+// typing the phrase into the chat box: GitHub issue #4 found that treating
+// free-typed text containing a color word as an instant deterministic
+// theme swap could silently misroute a business description (e.g. one
+// mentioning "biru") into losing its content, so the deterministic
+// shortcut is now scoped to the dedicated quick-action buttons only —
+// free-typed revisions go through the real AI revise path instead.
 
 test('TC-02: Color & Tone Revision changes the theme while content and the WA number stay intact', async ({ page }) => {
   await mockGenerateSuccess(page, WARUNG_KOPI_DRAFT)
@@ -25,8 +32,7 @@ test('TC-02: Color & Tone Revision changes the theme while content and the WA nu
   const colorBefore = await frame.locator('header').first().evaluate((el) => getComputedStyle(el).backgroundColor)
   const waLinkBefore = await frame.getByRole('link', { name: /WhatsApp/i }).first().getAttribute('href')
 
-  await page.getByPlaceholder('Minta perubahan pada website...').fill(TC02_INPUT)
-  await page.getByTitle('Kirim revisi').click()
+  await page.getByRole('button', { name: /Cokelat Klasik/ }).click()
 
   // "Tema warna berubah": some rendered color actually changed.
   await expect

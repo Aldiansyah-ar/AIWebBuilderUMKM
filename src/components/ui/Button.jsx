@@ -50,6 +50,18 @@ export default function Button({
   ].join(' ')
 
   if (href) {
+    // A disabled link-as-button must not stay a focusable/activatable <a> —
+    // pointer-events-none only blocks mouse clicks, keyboard users and
+    // screen readers could still "activate" it (see GitHub issue #10).
+    // Render a real disabled <button> instead so the disabled state is
+    // native and unambiguous.
+    if (disabled) {
+      return (
+        <button type="button" disabled className={base} {...rest}>
+          {children}
+        </button>
+      )
+    }
     return (
       <a href={href} className={base} {...rest}>
         {children}

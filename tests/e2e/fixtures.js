@@ -48,6 +48,20 @@ export async function mockGenerateFailure(page) {
   )
 }
 
+/**
+ * Mock POST /api/revise with a successful LLM response. `onRequest`, if
+ * given, is called with the parsed request body so a test can assert on
+ * exactly what was sent (issue #6: proving a revision actually reached
+ * this route, instead of being silently intercepted by a local/deterministic
+ * shortcut before ever hitting the network).
+ */
+export async function mockReviseSuccess(page, data, onRequest) {
+  await page.route('**/api/revise', async (route) => {
+    onRequest?.(route.request().postDataJSON())
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data }) })
+  })
+}
+
 /** Locator for the sandboxed live preview iframe (US-01: preview panel). */
 export function previewFrame(page) {
   return page.frameLocator('iframe[title="Live preview website UMKM"]')

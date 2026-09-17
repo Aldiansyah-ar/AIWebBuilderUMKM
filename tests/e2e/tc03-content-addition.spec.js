@@ -6,7 +6,12 @@ import { mockGenerateSuccess, previewFrame, WARUNG_KOPI_DRAFT } from './fixtures
 //   15 ribu"
 //   Hasil yang diharapkan: Daftar menu bertambah 1 item secara reaktif di
 //   preview tanpa reload. (Wajib Lulus)
-const TC03_INPUT = 'Tambahkan menu baru: Pisang Goreng Keju harga 15 ribu'
+//
+// Triggered via the "➕ Menu Baru" quick-action button rather than typing
+// the phrase into the chat box — see the note in tc02-color-revision.spec.js
+// (GitHub issue #4): the deterministic local shortcuts (color/headline/menu/
+// WA) are now scoped to the dedicated quick-action buttons, so a typed
+// message goes through the real AI revise path instead.
 
 test('TC-03: Content Addition grows the menu by 1 item reactively, without a page reload', async ({ page }) => {
   await mockGenerateSuccess(page, WARUNG_KOPI_DRAFT)
@@ -24,8 +29,7 @@ test('TC-03: Content Addition grows the menu by 1 item reactively, without a pag
   // document is never torn down and recreated by a navigation.
   await page.evaluate(() => { window.__e2eNoReloadMarker = 'still-here' })
 
-  await page.getByPlaceholder('Minta perubahan pada website...').fill(TC03_INPUT)
-  await page.getByTitle('Kirim revisi').click()
+  await page.getByRole('button', { name: /Menu Baru/ }).click()
 
   // "Daftar menu bertambah 1 item ... secara reaktif".
   await expect(services).toHaveCount(4)

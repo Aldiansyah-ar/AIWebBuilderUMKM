@@ -39,6 +39,10 @@ export default function Hero({
   style = {},
   _theme = 'services',
   mobilePreview = false,
+  // Computed via getAccessibleTextColor(primaryColor) by the template —
+  // overrides the default white text when the background doesn't have
+  // enough contrast for it (WCAG AA, issue #22).
+  textColor,
 }) {
   const {
     title = 'Selamat Datang',
@@ -58,17 +62,26 @@ export default function Hero({
       <Container>
         <div className={['flex flex-col items-center text-center gap-6 relative z-10', mobilePreview ? 'py-16' : 'py-20 md:py-32'].join(' ')}>
           {tagline && (
-            <div className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase bg-white/15 backdrop-blur-md border border-white/20 text-white/95 shadow-sm">
+            <div
+              className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase bg-white/15 backdrop-blur-md border border-white/20 text-white/95 shadow-sm"
+              style={textColor ? { color: textColor } : undefined}
+            >
               {tagline}
             </div>
           )}
 
-          <h1 className={[mobilePreview ? 'text-4xl' : 'text-4xl sm:text-5xl md:text-6xl', 'font-extrabold leading-tight max-w-4xl tracking-tight text-white drop-shadow-sm'].join(' ')}>
+          <h1
+            className={[mobilePreview ? 'text-4xl' : 'text-4xl sm:text-5xl md:text-6xl', 'font-extrabold leading-tight max-w-4xl tracking-tight text-white drop-shadow-sm'].join(' ')}
+            style={textColor ? { color: textColor } : undefined}
+          >
             {title}
           </h1>
 
           {subtitle && (
-            <p className={[mobilePreview ? 'text-base' : 'text-base sm:text-lg md:text-xl', 'max-w-2xl text-white/90 leading-relaxed font-normal'].join(' ')}>
+            <p
+              className={[mobilePreview ? 'text-base' : 'text-base sm:text-lg md:text-xl', 'max-w-2xl text-white/90 leading-relaxed font-normal'].join(' ')}
+              style={textColor ? { color: textColor, opacity: 0.9 } : undefined}
+            >
               {subtitle}
             </p>
           )}
@@ -79,11 +92,9 @@ export default function Hero({
             size="lg"
             target={hasValidWhatsapp ? '_blank' : undefined}
             rel={hasValidWhatsapp ? 'noopener noreferrer' : undefined}
-            aria-disabled={!hasValidWhatsapp}
-            className={[
-              'shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all text-base font-bold py-3.5 px-7',
-              !hasValidWhatsapp ? 'pointer-events-none opacity-50' : '',
-            ].join(' ')}
+            disabled={!hasValidWhatsapp}
+            title={!hasValidWhatsapp ? 'Nomor WhatsApp belum valid' : undefined}
+            className="shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all text-base font-bold py-3.5 px-7"
           >
             <WhatsAppIcon />
             {ctaText}
