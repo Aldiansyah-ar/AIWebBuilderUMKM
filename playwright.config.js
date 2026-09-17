@@ -13,8 +13,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  // issue #24: the full suite runs on both desktop and a real mobile device
+  // emulation, not just the couple of specs that manually override viewport
+  // size — catches device-specific breakage anywhere before Demo Day.
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
   ],
   // No GEMINI_API_KEY needed: every spec intercepts /api/generate and
   // /api/revise via page.route() before they leave the browser, so tests

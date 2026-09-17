@@ -30,6 +30,7 @@ import {
   TEMPLATE_META,
   determineTemplate,
   detectCategorySignal,
+  isValidWhatsappNumber,
 } from './lib/templateSelector'
 import { exportWebsiteToZip, copyHtmlToClipboard } from './lib/exportWebsite'
 import { useWebsite } from './store/websiteStore.jsx'
@@ -223,16 +224,25 @@ export default function App() {
       { id: progressId, sender: 'assistant', text: 'Sedang memproses permintaan Anda...', steps: stepsAt(0, -1) },
     ])
 
+    // Phase 1 -> 2 ("Memahami info bisnis" -> "Memilih template"): category/
+    // template detection (determineTemplate) already ran synchronously
+    // before runAiFlow was even called, so this is deliberate UI pacing
+    // (long enough for a human to actually register the phase, US-06) —
+    // not a stand-in for real async work, unlike the next transition.
     await wait(200)
     setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(1, 0) } : m)))
 
     const history = toChatHistory(messages)
-    await wait(150)
-    setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(2, 1) } : m)))
+
+    // Phase 2 -> 3 ("Memilih template" -> "AI menyusun konten"): now driven
+    // by the real request lifecycle via onStep, fired right as the fetch
+    // starts (issue #13's onStep callback) — not a second blind wait().
+    const onStep = () =>
+      setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(2, 1) } : m)))
 
     const result = isNewBusinessDescription
-      ? await generateWebsite(text)
-      : await reviseWebsite(websiteData, text, history)
+      ? await generateWebsite(text, { onStep })
+      : await reviseWebsite(websiteData, text, history, { onStep })
 
     setMessages((prev) => prev.map((m) => (m.id === progressId ? { ...m, steps: stepsAt(3, 2) } : m)))
 
@@ -245,6 +255,12 @@ export default function App() {
       responseText = isNewBusinessDescription
         ? `Draft website baru berhasil dibuat oleh AI untuk kategori ${TEMPLATE_META[detectedTemplateId].name}!`
         : `Permintaan revisi "${text}" berhasil diterapkan oleh AI!`
+
+      // issue #26: flag an invalid WA number as soon as the draft lands,
+      // not only later when the preview quietly disables the button.
+      if (isNewBusinessDescription && !isValidWhatsappNumber(result.data?.contact?.whatsappNumber)) {
+        responseText += ' Catatan: nomor WhatsApp yang terdeteksi sepertinya belum lengkap/valid — perbaiki di panel kontak supaya tombol pemesanan aktif.'
+      }
     } else {
       // Offline/failure fallback — same UX as before the backend integration.
       if (result.error && result.error !== 'not_configured') {
@@ -554,7 +570,12 @@ export default function App() {
           {/* Template Selector Pills — label text hidden below sm so the
               pills don't force the header to wrap on narrow phones
               (~390px); emoji + title tooltip still identify each one
-              (issue #32). */}
+              (issue #32). aria-label is set explicitly to the same short
+              label shown at sm+ (issue #24 cross-device smoke test found
+              that without it, the accessible name silently changed on
+              mobile to the `title` fallback text instead — inconsistent
+              between viewports for screen readers, and for anything
+              locating this button by name). */}
           <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 shrink-0">
             {Object.values(TEMPLATE_META).map((t) => {
               const isActive = activeTemplate === t.id
@@ -570,22 +591,27 @@ export default function App() {
                       : 'text-slate-400 hover:text-white hover:bg-slate-700/50',
                   ].join(' ')}
                   title={t.name}
+                  aria-label={rest.join(' ') || t.name}
                 >
-                  <span aria-hidden={rest.length > 0}>{emoji}</span>
-                  {rest.length > 0 && <span className="hidden sm:inline">{rest.join(' ')}</span>}
+                  <span aria-hidden="true">{emoji}</span>
+                  {rest.length > 0 && <span className="hidden sm:inline" aria-hidden="true">{rest.join(' ')}</span>}
                 </button>
               )
             })}
           </div>
 
-          {/* Publish Button (TSK-06D — stretch goal, disabled: no deploy provider configured) */}
+          {/* Publish Button (TSK-06D — stretch goal, disabled: no deploy provider configured).
+              aria-label kept as the short visible label so the accessible
+              name doesn't silently change on mobile once the text span
+              hides (issue #24 cross-device smoke test). */}
           <button
             disabled
             className="flex items-center gap-1.5 bg-slate-800/60 border border-slate-700/60 text-slate-400 text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-lg cursor-not-allowed shrink-0"
             title="Publish otomatis (stretch goal) — segera hadir. Gunakan Download Website untuk saat ini."
+            aria-label="Publish"
           >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Publish</span>
+            <UploadCloud className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline" aria-hidden="true">Publish</span>
           </button>
 
           {/* Download Website Button */}
@@ -593,9 +619,10 @@ export default function App() {
             onClick={handleDownload}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-lg transition-all shadow-xs shrink-0"
             title="Download bundle ZIP (HTML siap pakai)"
+            aria-label="Download Website"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Download Website</span>
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline" aria-hidden="true">Download Website</span>
           </button>
         </div>
       </header>

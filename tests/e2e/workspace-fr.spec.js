@@ -17,6 +17,15 @@ test.describe('FR-01 / US-01: Dual-Panel Workspace', () => {
 //   layar minimal." Also NFR-02: responsif 375px (smartphone) - 1440px (desktop).
 test.describe('FR-01 / US-02: Toggle Viewport Mode', () => {
   test('a Desktop/Mobile toggle switches the preview between the two modes', async ({ page }) => {
+    // This tests the in-app preview *simulator* toggle specifically, which
+    // only has room to show a visible difference once the outer layout
+    // itself is wide enough for the side-by-side chat+preview panels
+    // (md breakpoint) — on an actual narrow mobile browser the outer layout
+    // has already stacked full-width, so there's nothing left to shrink
+    // into. Force a desktop-sized viewport regardless of the project's
+    // device so this runs the same on every project (issue #24 cross-device
+    // run surfaced this on the mobile-chrome project).
+    await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/')
 
     const desktopBtn = page.getByRole('button', { name: 'Desktop' })

@@ -45,14 +45,23 @@ async function postJson(url, body) {
   }
 }
 
-/** Generate a fresh website draft from a business description (US-05). */
-export async function generateWebsite(input) {
+/**
+ * Generate a fresh website draft from a business description (US-05).
+ * `onStep`, if given, fires once right before the network call starts
+ * (issue #13) — the one genuinely async phase of the 4-phase onboarding
+ * progress (App.jsx's "AI menyusun konten"); everything before it
+ * (category/template detection) is already synchronous by the time this is
+ * called, so there's nothing else worth signaling.
+ */
+export async function generateWebsite(input, { onStep } = {}) {
+  onStep?.('composing')
   const json = await postJson('/api/generate', { input })
   return json
 }
 
-/** Request a chat-based revision against the current website state (US-07/US-08). */
-export async function reviseWebsite(current, message, history=[]) {
+/** Request a chat-based revision against the current website state (US-07/US-08). See generateWebsite for `onStep`. */
+export async function reviseWebsite(current, message, history = [], { onStep } = {}) {
+  onStep?.('composing')
   const json = await postJson('/api/revise', { current, message, history })
   return json
 }
