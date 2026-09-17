@@ -213,11 +213,14 @@ browser tanpa nulis curl.
   mengirim state JSON terakhir, bukan riwayat chat multi-turn. Kalau
   butuh AI mengingat percakapan sebelumnya (bukan cuma state terakhir),
   ini titik masuknya.
-- `fallback` yang dikirim balik oleh `/api/generate` saat `llm_failed`
-  belum dipakai oleh `App.jsx` (frontend pakai fallback deterministiknya
-  sendiri). Kalau mau fallback AI-generated-category lebih akurat
-  dipakai, sambungkan `result.fallback` di `App.jsx` bagian
-  `else` (baris "Offline/failure fallback").
+- ~~`fallback` yang dikirim balik oleh `/api/generate` saat `llm_failed`
+  belum dipakai oleh `App.jsx`~~ — **sudah beres** (issue #15): `App.jsx`
+  bagian "Offline/failure fallback" sudah membaca `result.fallback` dan
+  memprioritaskan `templateId`-nya di atas tebakan lokal
+  (`determineTemplate`) kalau keduanya beda. Dibuktikan oleh
+  `tests/e2e/backend-fallback.spec.js` — sebelumnya cuma
+  `mockGenerateFailure` (`fallback: null`) yang dipakai di test, jadi jalur
+  ini belum pernah benar-benar teruji meski kodenya sudah jalan.
 - Belum ada test otomatis untuk `generateWithRetry`/`validateWebsite`
   (mis. mock response Gemini yang malformed, pastikan retry+fallback
   jalan). Cocok buat TSK-07A (stability testing, Hari 8).
