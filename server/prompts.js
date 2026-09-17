@@ -30,7 +30,7 @@ export function buildRevisionPrompt(oldJson, userMsg, history = []) {
   const historySection = historyBlock
   ? `\nRiwayat percakapan:\n${historyBlock}\n`
   : `\n(Tidak ada riwayat percakapan sebelumnya)\n`
-  return `${SYSTEM_PROMPT_V1}\n${historySection}\n\nState website saat ini:\n${JSON.stringify(oldJson).slice(0, 3500)}\n\nRevisi diminta: """${userMsg.slice(0, 500)}"""\nAturan revisi: Gunakan riwayat percakapan untuk memahami konteks. Ubah HANYA field yang diminta. Jangan hapus section lain. Jika minta warna → ubah theme.primaryColor/accentColor saja. Jika minta tambah menu → append ke services[].\nBalas JSON lengkap yang sudah direvisi.`;
+  return `${SYSTEM_PROMPT_V1}\n${historySection}\n\nState website saat ini:\n${JSON.stringify(oldJson).slice(0, 3500)}\n\nRevisi diminta: """${userMsg.slice(0, 500)}"""\nAturan revisi: Gunakan riwayat percakapan untuk memahami konteks. Ubah HANYA field yang diminta. Jangan hapus section lain. Jika minta warna → ubah theme.primaryColor/accentColor saja. Jika minta tambah menu → append ke services[]. Jika minta hapus menu tertentu (mis. "hapus menu es kopi") → hapus item itu dari services[], TAPI services[] wajib tetap berisi minimal 3 item — kalau menghapus akan membuat kurang dari 3, JANGAN hapus, biarkan services[] apa adanya. Jika minta ubah nama/deskripsi/harga menu tertentu (mis. "ubah harga es kopi jadi Rp20.000") → ubah field item itu saja di services[], item lain tetap sama persis.\nBalas JSON lengkap yang sudah direvisi.`;
 }
 
 export function trimHistory(history, max = 3) {

@@ -3,6 +3,11 @@ import { getFallback } from "../../shared/schema.js";
 
 const WebsiteContext = createContext(null);
 const STORAGE_KEY = "website_v1";
+// Mirrors shared/schema.js's own `services.length < 3` rule — kept as a
+// constant here (not re-imported from schema.js, which only validates
+// LLM/fallback output) so the direct-edit Delete guard can't silently drift
+// out of sync with it.
+export const MIN_SERVICE_ITEMS = 3;
 
 export function WebsiteProvider({ children }) {
   const [website, setWebsiteState] = useState(() => {
@@ -68,6 +73,32 @@ export function WebsiteProvider({ children }) {
     setWebsite((prev) => prev ? { ...prev, services: [item, ...(prev.services || [])] } : prev);
   }, [setWebsite]);
 
+  // Menu (services) CRUD — #52. Create already existed (appendServiceItem);
+  // these fill in Update/Delete for a specific item by index. Both return a
+  // plain result object instead of throwing, so the calling UI (a preview
+  // card's inline edit form) can show/disable itself accordingly rather than
+  // needing a try/catch around a store call.
+  const updateServiceItem = useCallback((index, patch) => {
+    if (!website || !Array.isArray(website.services) || index < 0 || index >= website.services.length) {
+      return { ok: false, reason: 'not-found' };
+    }
+    const services = website.services.slice();
+    services[index] = { ...services[index], ...patch };
+    setWebsite({ ...website, services });
+    return { ok: true };
+  }, [website, setWebsite]);
+
+  const removeServiceItem = useCallback((index) => {
+    if (!website || !Array.isArray(website.services) || index < 0 || index >= website.services.length) {
+      return { ok: false, reason: 'not-found' };
+    }
+    if (website.services.length <= MIN_SERVICE_ITEMS) {
+      return { ok: false, reason: 'min-items' };
+    }
+    setWebsite({ ...website, services: website.services.filter((_, i) => i !== index) });
+    return { ok: true };
+  }, [website, setWebsite]);
+
   const loadFallback = useCallback((category) => {
     const fb = getFallback(category);
     setWebsite(fb);
@@ -96,7 +127,7 @@ export function WebsiteProvider({ children }) {
   }, []);
 
   return (
-    <WebsiteContext.Provider value={{ website, history, error, setError, setWebsite, patchWebsite, appendServiceItem, loadFallback, clear, undo, saveStatus }}>
+    <WebsiteContext.Provider value={{ website, history, error, setError, setWebsite, patchWebsite, appendServiceItem, updateServiceItem, removeServiceItem, loadFallback, clear, undo, saveStatus }}>
       {children}
     </WebsiteContext.Provider>
   );
