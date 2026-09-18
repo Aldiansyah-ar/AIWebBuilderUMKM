@@ -18,7 +18,7 @@
 ## Setup
 Clone the repository
 ```bash
-git clone https://github.com/aerizaaminanto/AIWebBuilderUMKM
+git clone https://github.com/Aldiansyah-ar/AIWebBuilderUMKM
 ```
 Direct to the project directory
 ```bash
