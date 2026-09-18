@@ -1,30 +1,39 @@
-# Website Builder
+# AI Web Builder UMKM
 
-React + Vite (JS) + Tailwind CSS v4
+## Overview
+<p style="text-align: justify;">
+  UMKM (Micro, Small, and Medium Enterprises) are productive businesses operated by individuals, groups, households, or small-scale business entities. To simplify the digitization process for UMKM, we offer a flexible and user-friendly web creation solution through AI Web Builder UMKM. This platform features a chat panel and a live preview specifically designed for entrepreneurs. Through a prompt-based system, users can describe their business to create a company website instantly. Without requiring any coding skills, the web design can be downloaded directly in a ZIP format for practical and efficient site management. 
+</p>
+
+## Stack
+- Vite 8 + `@vitejs/plugin-react`
+- Node.js (Express.js)
+- React 19 (JS, no TypeScript)
+- Tailwind CSS v4 via `@tailwindcss/vite` — no `tailwind.config.js` needed, see `src/index.css:1` and `vite.config.js:1`
 
 ## Prerequisites
-
 - Node.js >= 18 (tested on 24.18.0)
 - npm 11
 
-## Get started
-
+## Setup
+Clone the repository
+```bash
+git clone https://github.com/aerizaaminanto/AIWebBuilderUMKM
+```
+Direct to the project directory
+```bash
+cd AIWebBuilderUMKM
+```
+Install the `npm package`
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+```
+Run the web
+```bash
+npm run dev      # http://localhost:3000
 ```
 
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start dev server with HMR |
-| `npm run build` | Production build to `dist/` |
-| `npm run preview` | Preview production build |
-| `npm run lint` | Lint with Oxlint |
-
-## Stack
-
-- Vite 8 + `@vitejs/plugin-react`
-- React 19 (JS, no TypeScript)
-- Tailwind CSS v4 via `@tailwindcss/vite` — no `tailwind.config.js` needed, see `src/index.css:1` and `vite.config.js:1`
+## Project Member
+- Aldiansyah Anugrah Ramadhan
+- Achmad Eriza Aminanto
+- Ninditya Salma Nurul Aini
