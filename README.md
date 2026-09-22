@@ -2,7 +2,7 @@
 
 ## Overview
 <p style="text-align: justify;">
-  UMKM (Micro, Small, and Medium Enterprises) are productive businesses operated by individuals, groups, households, or small-scale business entities. To simplify the digitization process for UMKM, we offer a flexible and user-friendly web creation solution through AI Web Builder UMKM. This platform features a chat panel and a live preview specifically designed for entrepreneurs. Through a prompt-based system, users can describe their business to create a company website instantly. Without requiring any coding skills, the web design can be downloaded directly in a ZIP format for practical and efficient site management. 
+  UMKM (Micro, Small, and Medium Enterprises) are productive businesses operated by individuals, groups, households, or small-scale business entities. To simplify the digitization process for UMKM, we offer a flexible and user-friendly web creation solution through AI Web Builder UMKM. This platform features a chat panel and a live preview specifically designed for entrepreneurs. Through a prompt-based system, users can describe their business to create a company website instantly. 
 </p>
 
 ## Stack
